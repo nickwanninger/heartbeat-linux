@@ -10,7 +10,7 @@
 #ifndef _CONFIG
 #define _CONFIG
 
-#define DEBUG_OUTPUT        0 // have DEBUG()s print something
+#define DEBUG_OUTPUT        1 // have DEBUG()s print something
 #define OUTPUT_SHOWS_THREAD 1 // show thread number in debugging output
 
 // Used to to fake interrupts using itimers, one per thread
