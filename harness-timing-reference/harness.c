@@ -179,7 +179,8 @@ static void handler(int sig, siginfo_t* si, void* priv) {
 
   interval_sum[which] += interval;
   num_interrupts[which] += 1;
-  
+
+  reset_timer(which);  
 }
 
 static void thread_work(uint64_t which) {
