@@ -274,15 +274,17 @@ void* worker(void* arg) {
     cpu_set_t set;
     CPU_ZERO(&set);
     CPU_SET(cpu, &set);
-    if (sched_setaffinity(0, sizeof(set), &set) < 0) { // do it
-      ERROR("Can't setaffinity in thread\n");
+    
+    int affinity_res = sched_setaffinity(0, sizeof(set), &set);
+    if (affinity_res < 0) { // do it
+      ERROR("Can't setaffinity in thread, %d\n", affinity_res);
       exit(-1);
     }
   }
 
   // build timer for the thread here
   // the timer will actually be set in the producer or consumer function
-  if (interrupt_producers || interrupt_consumers) {
+  if (1 /*interrupt_producers || interrupt_consumers*/) {
     struct sigevent sev; //so this generates the signal that the code in main then responds to?
 
     memset(&sev, 0, sizeof(sev));
@@ -331,17 +333,15 @@ int main(int argc, char* argv[]) {
 
   //num_producers = atol(argv[optind]);
   //num_consumers = atol(argv[optind + 1]);
-  //num_cpus = get_nprocs();
-  num_cpus = 8;
-  num_threads   = num_cpus;
+  num_cpus = get_nprocs();
+  num_threads = num_cpus;
   average_interval = 0;
   //ring_size     = atoi(argv[optind + 2]);
   //num_ops       = atol(argv[optind + 3]);
 
   srand(time(NULL));
   
-
-  if (interrupt_producers || interrupt_consumers) {
+  if (1 /*interrupt_producers || interrupt_consumers*/) {
     struct sigaction sa;
 
     memset(&sa, 0, sizeof(sa));
@@ -355,14 +355,16 @@ int main(int argc, char* argv[]) {
       return -1;
     }
 
+    // allocate timer array
     timer = (timer_t*)malloc(sizeof(timer_t) * (num_threads));
     if (!timer) {
       ERROR("Failed to allocate timer array\n");
       return -1;
     }
     memset(timer, 0, sizeof(timer_t) * (num_threads));
-
+    DEBUG("Allocated array of %ld timers\n", num_threads);
   }
+
 
   min = (int*)malloc(sizeof(int) * (num_threads + THREAD_OFFSET)); //array of min interval for each thread
   memset(min, INT_MAX, sizeof(sizeof(int) * (num_threads + THREAD_OFFSET)));
