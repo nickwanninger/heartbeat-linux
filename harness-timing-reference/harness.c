@@ -38,11 +38,11 @@ struct timeval end;
 #define EXTERMINATE -1ULL
 
 pthread_barrier_t barrier;
-
+/*
 int static_mapping_producers;
 int static_mapping_consumers;
 uint64_t seed_value = -1ULL;
-uint64_t num_threads;
+
 uint64_t num_cpus_producers;
 uint64_t num_cpus_consumers;
 uint64_t num_producers;
@@ -50,10 +50,11 @@ uint64_t num_consumers;
 uint64_t num_ops;
 int interrupt_producers;
 int interrupt_consumers;
+*/
+
 int interrupts = 1;
-
-uint64_t interrupt_us = 100; // 10 ms by default
-
+uint64_t interrupt_us = 20; // 10 ms by default
+uint64_t num_threads;
 
 // in order to match up with gdb:
 // tid[0] => nothing
@@ -67,7 +68,7 @@ pthread_t* tid;   // array of thread ids
 timer_t* timer;
 
 ring_t* ring;
-#define NUM_CYCLES 10
+#define NUM_CYCLES 10000
 uint64_t average_interval;
 int* min; //array of min interval for each thread
 int* max; //array of max interval for each thread
@@ -75,7 +76,7 @@ uint64_t* last; //array of last interrupt time
 uint64_t* num_interrupts; //array of interrupt count for each thread
 uint64_t* interval_sum; //array of the sum of intervals for use computing the average
 int num_cpus;
-
+/*
 uint64_t producer_checksum;
 uint64_t producer_count;
 uint64_t producer_interrupt_count;
@@ -84,7 +85,7 @@ uint64_t consumer_checksum;
 uint64_t consumer_count;
 uint64_t consumer_interrupt_count;
 uint64_t consumer_interrupt_successes;
-
+*/
 
 
 static inline int get_thread_id() {
@@ -169,6 +170,7 @@ static void* make_item(uint64_t which, uint64_t tag, uint64_t isintr) {
 // note that printing is dangerous here since it's in signal context
 //
 static void handler(int sig, siginfo_t* si, void* priv) {
+  DEBUG("interrupt!\n");
   uint64_t which = si->si_value.sival_int;
   uint64_t cur = rdtsc();
   int interval = cur - last[which];
@@ -217,8 +219,13 @@ static void thread_work(uint64_t which) {
     signal(INTERRUPT_SIGNAL, SIG_IGN);
     //stop_timer(which);
   }  
-
-  avg_int = interval_sum[which]/num_interrupts[which];
+  if (num_interrupts[which]) {
+  	avg_int = interval_sum[which]/num_interrupts[which];
+  	//DEBUG("past the line");
+  } else {
+    avg_int = 0;
+    DEBUG("--had no interrupts");
+  }
   atomic_fetch_and_add(&average_interval, avg_int); // add my average time to the mass one
 
   // wait again for everyone
@@ -284,7 +291,7 @@ void* worker(void* arg) {
 
   // build timer for the thread here
   // the timer will actually be set in the producer or consumer function
-  if (1 /*interrupt_producers || interrupt_consumers*/) {
+  if (interrupts) {
     struct sigevent sev; //so this generates the signal that the code in main then responds to?
 
     memset(&sev, 0, sizeof(sev));
@@ -293,7 +300,7 @@ void* worker(void* arg) {
     sev._sigev_un._tid        = get_thread_id();
     sev.sigev_value.sival_int = myid;
 
-    if (timer_create(CLOCK_REALTIME, &sev, &timer[myid])) {
+    if (timer_create(CLOCK_MONOTONIC, &sev, &timer[myid])) {
       ERROR("Failed to create timer\n");
       exit(-1);
     }
@@ -400,7 +407,7 @@ int main(int argc, char* argv[]) {
     return -1;
   }
 
-  INFO("Starting %lu software threads (%lu producers, %lu consumers)\n", num_threads, num_producers, num_consumers);
+  INFO("Starting %lu software threads\n", num_threads);
 
   for (i = THREAD_OFFSET; i < (num_threads + THREAD_OFFSET); i++) {
     rc = pthread_create(&(tid[i]), // thread id gets put here
@@ -440,7 +447,7 @@ int main(int argc, char* argv[]) {
   }
   average_interval /= num_threads;
 
-  printf("min: %d avg: %lu max: %d", min_interval, average_interval, max_interval);
+  printf("min: %d avg: %lu max: %d\n", min_interval, average_interval, max_interval);
 
 /*
   double dur;
