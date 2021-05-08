@@ -172,14 +172,19 @@ static void* make_item(uint64_t which, uint64_t tag, uint64_t isintr) {
 static void handler(int sig, siginfo_t* si, void* priv) {
   //DEBUG("interrupt!\n");
   uint64_t which = si->si_value.sival_int;
-  
+ 
+   
   __sync_synchronize();
   uint64_t cur = rdtsc();
 
   __sync_synchronize();
+  
+  //uint64_t cur = clock_gettime(CLOCK_MONOTONIC); 
   uint64_t interval = cur - last[which];
   last[which] = cur;
-
+  if (interval ==0) {
+    DEBUG("INTERVAL WAS 0!!!!!!");
+  }
   if (interval < min[which]) { min[which] = interval; }
   if (interval > max[which]) { max[which] = interval; }
 
@@ -217,7 +222,7 @@ static void thread_work(uint64_t which) {
     gen = (uint64_t)make_item(which, rand(), 1);
     avg_int = gen;
   }
-  DEBUG("\t%lu done with work\n", which);
+  //DEBUG("\t%lu done with work\n", which);
   // turn off further producer interrupts before we add terminal item
   if (interrupts) {
     signal(INTERRUPT_SIGNAL, SIG_IGN);
@@ -244,14 +249,34 @@ static void thread_work(uint64_t which) {
   return;
 
 }
+static void print_arrays(int num) {
+  uint64_t i; 
+  for (i=0; i< (num_threads + THREAD_OFFSET); i++) {
+    DEBUG("----- %lu : %lu \n", i, min[i]);
+  }
+  for (i=0; i< (num_threads + THREAD_OFFSET); i++) {
+    DEBUG("+++++ %lu : %lu \n", i, max[i]);
+  }
+  if (num > 0) {
+    for (i=0; i< (num_threads + THREAD_OFFSET); i++) {
+      DEBUG("interval_sum %lu : %lu \n", i, interval_sum[i]);
+    }
+    for (i=0; i< (num_threads + THREAD_OFFSET); i++) {
+      DEBUG("##### %lu : %lu \n", i, num_interrupts[i]);
+    }
 
+  }
+
+
+
+}
 void* worker(void* arg) {
   long myid  = (long)arg;
   long mytid = tid[myid];
 
   DEBUG("-Hello from thread %ld (tid %ld)\n", myid, mytid);
 
-  myid -= THREAD_OFFSET; // eliminate offset so we can compute producer 0.., instead of 2..
+  //myid -= THREAD_OFFSET; // eliminate offset so we can compute producer 0.., instead of 2..
 
   uint64_t cpu;
 /* Keeping this part for reference
@@ -381,19 +406,21 @@ int main(int argc, char* argv[]) {
 
    min = (uint64_t*)malloc(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)); //array of max interval for each thread
 
-  memset(min, UINT_MAX, sizeof(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)));
-
+  memset(min, UINT_MAX, sizeof(uint64_t) * (num_threads + THREAD_OFFSET));
+  for (i=0; i< (num_threads + THREAD_OFFSET); i++) {
+    DEBUG("------------- %lu : %lu \n", i, min[i]);
+  }
   max = (uint64_t*)malloc(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)); //array of max interval for each thread
-  memset(max, 0, sizeof(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)));
+  memset(max, 0, sizeof(uint64_t) * (num_threads + THREAD_OFFSET));
 
   last = (uint64_t*)malloc(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)); //array of last interrupt time
-  memset(last, 0, sizeof(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)));
+  memset(last, 0, sizeof(uint64_t) * (num_threads + THREAD_OFFSET));
 
   num_interrupts = (uint64_t*)malloc(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)); //array of interrupt count for each thread
-  memset(num_interrupts, 0, sizeof(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)));
+  memset(num_interrupts, 0, sizeof(uint64_t) * (num_threads + THREAD_OFFSET));
 
   interval_sum = (uint64_t*)malloc(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)); //array of the sum of intervals for use computing the average
-  memset(interval_sum, 0, sizeof(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)));
+  memset(interval_sum, 0, sizeof(uint64_t) * (num_threads + THREAD_OFFSET));
 
  
   tid = (pthread_t*)malloc(sizeof(pthread_t) * (num_threads + THREAD_OFFSET));
@@ -446,11 +473,13 @@ int main(int argc, char* argv[]) {
     }
   }
 
+  print_arrays(1);
   uint64_t min_interval = UINT_MAX;
   uint64_t max_interval = 0;
   for (i = THREAD_OFFSET; i < (num_threads + THREAD_OFFSET); i++){
 	if (min[i] < min_interval) { min_interval = min[i]; }
 	if (max[i] > max_interval) { max_interval = max[i]; }
+	DEBUG("CHECKING THREAD %lu at index %lu \n", tid[i], i);
   }
   average_interval /= num_threads;
 
