@@ -68,10 +68,10 @@ pthread_t* tid;   // array of thread ids
 timer_t* timer;
 
 ring_t* ring;
-#define NUM_CYCLES 10000
+#define NUM_CYCLES 10000000
 uint64_t average_interval;
-int* min; //array of min interval for each thread
-int* max; //array of max interval for each thread
+uint64_t* min; //array of min interval for each thread
+uint64_t* max; //array of max interval for each thread
 uint64_t* last; //array of last interrupt time
 uint64_t* num_interrupts; //array of interrupt count for each thread
 uint64_t* interval_sum; //array of the sum of intervals for use computing the average
@@ -152,7 +152,7 @@ static void reset_timer(uint64_t which) {
   it.it_value.tv_sec     = 0;
   it.it_value.tv_nsec    = interrupt_us * 1000;
 
-  DEBUG("%lu setting repeating timer interrupt for %lu us from now\n", which, interrupt_us);
+  //DEBUG("%lu setting repeating timer interrupt for %lu us from now\n", which, interrupt_us);
 
   if (timer_settime(timer[which], 0, &it, 0)) {
     ERROR("Failed to set timer?!\n");
@@ -170,14 +170,18 @@ static void* make_item(uint64_t which, uint64_t tag, uint64_t isintr) {
 // note that printing is dangerous here since it's in signal context
 //
 static void handler(int sig, siginfo_t* si, void* priv) {
-  DEBUG("interrupt!\n");
+  //DEBUG("interrupt!\n");
   uint64_t which = si->si_value.sival_int;
+  
+  __sync_synchronize();
   uint64_t cur = rdtsc();
-  int interval = cur - last[which];
+
+  __sync_synchronize();
+  uint64_t interval = cur - last[which];
   last[which] = cur;
 
   if (interval < min[which]) { min[which] = interval; }
-  else if (interval > max[which]) { max[which] = interval; }
+  if (interval > max[which]) { max[which] = interval; }
 
   interval_sum[which] += interval;
   num_interrupts[which] += 1;
@@ -224,8 +228,9 @@ static void thread_work(uint64_t which) {
   	//DEBUG("past the line");
   } else {
     avg_int = 0;
-    DEBUG("--had no interrupts");
+    DEBUG("--had no interrupts\n");
   }
+  DEBUG("THREAD %lu finish with min: %lu, avg: %lu, max, %lu \n", which, min[which], avg_int, max[which]);
   atomic_fetch_and_add(&average_interval, avg_int); // add my average time to the mass one
 
   // wait again for everyone
@@ -340,7 +345,8 @@ int main(int argc, char* argv[]) {
 
   //num_producers = atol(argv[optind]);
   //num_consumers = atol(argv[optind + 1]);
-  num_cpus = get_nprocs();
+  //num_cpus = get_nprocs();
+  num_cpus = 3;  
   num_threads = num_cpus;
   average_interval = 0;
   //ring_size     = atoi(argv[optind + 2]);
@@ -373,11 +379,12 @@ int main(int argc, char* argv[]) {
   }
 
 
-  min = (int*)malloc(sizeof(int) * (num_threads + THREAD_OFFSET)); //array of min interval for each thread
-  memset(min, INT_MAX, sizeof(sizeof(int) * (num_threads + THREAD_OFFSET)));
+   min = (uint64_t*)malloc(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)); //array of max interval for each thread
 
-  max = (int*)malloc(sizeof(int) * (num_threads + THREAD_OFFSET)); //array of max interval for each thread
-  memset(max, 0, sizeof(sizeof(int) * (num_threads + THREAD_OFFSET)));
+  memset(min, UINT_MAX, sizeof(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)));
+
+  max = (uint64_t*)malloc(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)); //array of max interval for each thread
+  memset(max, 0, sizeof(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)));
 
   last = (uint64_t*)malloc(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)); //array of last interrupt time
   memset(last, 0, sizeof(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)));
@@ -439,15 +446,15 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  int min_interval = INT_MAX;
-  int max_interval = 0;
+  uint64_t min_interval = UINT_MAX;
+  uint64_t max_interval = 0;
   for (i = THREAD_OFFSET; i < (num_threads + THREAD_OFFSET); i++){
 	if (min[i] < min_interval) { min_interval = min[i]; }
 	if (max[i] > max_interval) { max_interval = max[i]; }
   }
   average_interval /= num_threads;
 
-  printf("min: %d avg: %lu max: %d\n", min_interval, average_interval, max_interval);
+  printf("min: %lu, avg: %lu max: %lu \n", min_interval, average_interval, max_interval);
 
 /*
   double dur;
