@@ -135,7 +135,6 @@ static uint64_t exp_rand(uint64_t mean_us) {
 
   return ret;
 }*/
-
 static inline uint64_t __attribute__((always_inline))
 rdtsc (void)
 {
@@ -143,6 +142,20 @@ rdtsc (void)
   asm volatile("rdtsc" : "=a"(lo), "=d"(hi));
   return lo | ((uint64_t)(hi) << 32);
 }
+
+uint64_t measure_time() {
+  if (0) {
+    __sync_synchronize();
+    uint64_t temp= rdtsc();
+    __sync_synchronize();
+    return temp;
+  } else {
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return t.tv_sec * 1000000 + t.tv_nsec / 1000;
+  }
+}
+
 
 static void reset_timer(uint64_t which) {
   struct itimerspec it; 
@@ -153,7 +166,7 @@ static void reset_timer(uint64_t which) {
   it.it_value.tv_nsec    = interrupt_us * 1000;
 
   //DEBUG("%lu setting repeating timer interrupt for %lu us from now\n", which, interrupt_us);
-
+  last[which] = measure_time();
   if (timer_settime(timer[which], 0, &it, 0)) {
     ERROR("Failed to set timer?!\n");
   }
@@ -164,8 +177,6 @@ static void* make_item(uint64_t which, uint64_t tag, uint64_t isintr) {
   uint64_t gen = (isintr << 63) + (which << 32) + tag;
   return (void*)gen;
 }
-
-
 //
 // note that printing is dangerous here since it's in signal context
 //
@@ -173,15 +184,10 @@ static void handler(int sig, siginfo_t* si, void* priv) {
   //DEBUG("interrupt!\n");
   uint64_t which = si->si_value.sival_int;
  
-   
-  __sync_synchronize();
-  uint64_t cur = rdtsc();
-
-  __sync_synchronize();
-  
-  //uint64_t cur = clock_gettime(CLOCK_MONOTONIC); 
+ 
+  uint64_t cur = measure_time();
   uint64_t interval = cur - last[which];
-  last[which] = cur;
+  //last[which] = cur;
   if (interval ==0) {
     DEBUG("INTERVAL WAS 0!!!!!!");
   }
