@@ -75,6 +75,7 @@ uint64_t* max; //array of max interval for each thread
 uint64_t* last; //array of last interrupt time
 uint64_t* num_interrupts; //array of interrupt count for each thread
 uint64_t* interval_sum; //array of the sum of intervals for use computing the average
+
 int num_cpus;
 /*
 uint64_t producer_checksum;
@@ -86,6 +87,42 @@ uint64_t consumer_count;
 uint64_t consumer_interrupt_count;
 uint64_t consumer_interrupt_successes;
 */
+
+// BEGIN code for recording individual intervals per thread
+#define MAX_ENTRIES_PER_THREAD 20000
+uint64_t* intervals;
+
+uint64_t* init_intervals_arr() {
+	intervals = (uint64_t*)malloc(sizeof(uint64_t) * num_threads * MAX_ENTRIES_PER_THREAD);
+	if (!intervals) {
+		ERROR("Failed to allocate intervals array");
+	}
+	memset(intervals, 0, sizeof(uint64_t) * num_threads * MAX_ENTRIES_PER_THREAD);
+	return intervals;
+}
+
+inline void record_interval(int tid, int idx, uint64_t val) {
+	intervals[num_threads * tid + idx] = val;
+}
+
+void dump_intervals() {
+	FILE *fp = fopen("intervals.data", "wb");
+	// fwrite(intervals, sizeof(uint64_t), sizeof(intervals), f);
+	// fclose(f);
+	fprintf(fp, "num_threads %lu\n", num_threads);
+	fprintf(fp, "max_records_per_thread %d\n", MAX_ENTRIES_PER_THREAD);
+
+	fprintf(fp, "num_records_for_each_thread\n");
+	for (int i = 0; i < num_threads; ++i) {
+		fprintf(fp, "%d %lu\n", i, num_interrupts[i+2]);
+	}
+
+	fprintf(fp, "data\n");
+	for (int i = 0; i < num_threads * MAX_ENTRIES_PER_THREAD; ++i) {
+		fprintf(fp, "%lu\n", intervals[i]);
+	}
+}
+// END code for recording individual intervals per thread
 
 
 static inline int get_thread_id() {
@@ -194,6 +231,7 @@ static void handler(int sig, siginfo_t* si, void* priv) {
   if (interval < min[which]) { min[which] = interval; }
   if (interval > max[which]) { max[which] = interval; }
 
+  record_interval(which, num_interrupts[which], interval);
   interval_sum[which] += interval;
   num_interrupts[which] += 1;
 
@@ -258,17 +296,17 @@ static void thread_work(uint64_t which) {
 static void print_arrays(int num) {
   uint64_t i; 
   for (i=0; i< (num_threads + THREAD_OFFSET); i++) {
-    DEBUG("----- %lu : %lu \n", i, min[i]);
+    DEBUG("min %lu : %lu \n", i, min[i]);
   }
   for (i=0; i< (num_threads + THREAD_OFFSET); i++) {
-    DEBUG("+++++ %lu : %lu \n", i, max[i]);
+    DEBUG("max %lu : %lu \n", i, max[i]);
   }
   if (num > 0) {
     for (i=0; i< (num_threads + THREAD_OFFSET); i++) {
       DEBUG("interval_sum %lu : %lu \n", i, interval_sum[i]);
     }
     for (i=0; i< (num_threads + THREAD_OFFSET); i++) {
-      DEBUG("##### %lu : %lu \n", i, num_interrupts[i]);
+      DEBUG("num_interrupts %lu : %lu \n", i, num_interrupts[i]);
     }
 
   }
@@ -377,7 +415,7 @@ int main(int argc, char* argv[]) {
   //num_producers = atol(argv[optind]);
   //num_consumers = atol(argv[optind + 1]);
   //num_cpus = get_nprocs();
-  num_cpus = 3;  
+  num_cpus = get_nprocs_conf();  
   num_threads = num_cpus;
   average_interval = 0;
   //ring_size     = atoi(argv[optind + 2]);
@@ -435,6 +473,9 @@ int main(int argc, char* argv[]) {
     ERROR("Cannot allocate tids\n");
     return -1;
   }
+
+  intervals = init_intervals_arr();
+
 
 
   memset(tid, 0, sizeof(sizeof(pthread_t) * (num_threads + THREAD_OFFSET)));
@@ -523,6 +564,9 @@ int main(int argc, char* argv[]) {
   //ring_destroy(ring);
 
   INFO("Done!\n");
+
+  dump_intervals(intervals);
+  free(intervals);
 
   return 0;
 }
