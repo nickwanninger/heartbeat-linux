@@ -129,7 +129,7 @@ rdtsc (void)
   return lo | ((uint64_t)(hi) << 32);
 }
 
-inline uint64_t measure_time() {
+static inline uint64_t measure_time() {
   if (!TIMING_METHOD) {
     uint64_t temp = rdtsc();
     return temp;
@@ -176,7 +176,6 @@ static void handler(int sig, siginfo_t* si, void* priv) {
   }
   
   record_interval(which, num_interrupts[which], interval);
-  interval_sum[which] += interval;
   num_interrupts[which] += 1;
 
   reset_timer(which);  
