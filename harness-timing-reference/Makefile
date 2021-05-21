@@ -8,7 +8,7 @@
 
 ## Command to compile code. Change to `-Og` version for debugging with GDB
 #CC = gcc -Wall -Og -g -pthread
-CC = gcc -Wall -O3 -pthread
+CC = gcc -Wall -v -O3 -pthread
 
 all: harness
 

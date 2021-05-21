@@ -38,20 +38,8 @@ struct timeval end;
 #define EXTERMINATE -1ULL
 
 pthread_barrier_t barrier;
-/*
-int static_mapping_producers;
-int static_mapping_consumers;
-uint64_t seed_value = -1ULL;
 
-uint64_t num_cpus_producers;
-uint64_t num_cpus_consumers;
-uint64_t num_producers;
-uint64_t num_consumers;
-uint64_t num_ops;
-int interrupt_producers;
-int interrupt_consumers;
-*/
-
+#define TIMING_METHOD 0 //0 for rdtsc, 1 for gettimeofday
 int interrupts = 1;
 uint64_t interrupt_us = 20; // 10 ms by default
 uint64_t num_threads;
@@ -67,26 +55,12 @@ pthread_t* tid;   // array of thread ids
 // we need to use timer_create, etc to actually do per-thread timers
 timer_t* timer;
 
-ring_t* ring;
-#define NUM_CYCLES 10000000
-uint64_t average_interval;
-uint64_t* min; //array of min interval for each thread
-uint64_t* max; //array of max interval for each thread
+
+#define AMT_WORK 10000000
 uint64_t* last; //array of last interrupt time
 uint64_t* num_interrupts; //array of interrupt count for each thread
-uint64_t* interval_sum; //array of the sum of intervals for use computing the average
-
 int num_cpus;
-/*
-uint64_t producer_checksum;
-uint64_t producer_count;
-uint64_t producer_interrupt_count;
-uint64_t producer_interrupt_successes;
-uint64_t consumer_checksum;
-uint64_t consumer_count;
-uint64_t consumer_interrupt_count;
-uint64_t consumer_interrupt_successes;
-*/
+
 
 // BEGIN code for recording individual intervals per thread
 #define MAX_ENTRIES_PER_THREAD 20000
@@ -129,6 +103,7 @@ static inline int get_thread_id() {
   return syscall(SYS_gettid);
 }
 
+//used in DEBUG statements
 uint64_t find_my_thread() {
   pthread_t me = pthread_self();
   uint64_t i;
@@ -145,33 +120,7 @@ uint64_t find_my_thread() {
   return -1;
 }
 
-/*
-// Generate exponentially distributed random number with the given mean
-// result is in us for use with itimer
-static uint64_t exp_rand(uint64_t mean_us) {
-  uint64_t ret = 0;
 
-  double u = drand48();
-
-  // u = [0,1), uniform random, now convert to exponential
-
-  u = -log(1.0 - u) * ((double)mean_us);
-
-  // now shape u back into a uint64_t and return
-
-  if (u > ((double)(-1ULL))) {
-    ret = -1ULL;
-  } else {
-    ret = (uint64_t)u;
-  }
-
-  // corner case
-  if (ret == 0) {
-    ret = 1;
-  }
-
-  return ret;
-}*/
 static inline uint64_t __attribute__((always_inline))
 rdtsc (void)
 {
@@ -180,11 +129,9 @@ rdtsc (void)
   return lo | ((uint64_t)(hi) << 32);
 }
 
-uint64_t measure_time() {
-  if (0) {
-    __sync_synchronize();
-    uint64_t temp= rdtsc();
-    __sync_synchronize();
+inline uint64_t measure_time() {
+  if (!TIMING_METHOD) {
+    uint64_t temp = rdtsc();
     return temp;
   } else {
     struct timespec t;
@@ -218,19 +165,16 @@ static void* make_item(uint64_t which, uint64_t tag, uint64_t isintr) {
 // note that printing is dangerous here since it's in signal context
 //
 static void handler(int sig, siginfo_t* si, void* priv) {
-  //DEBUG("interrupt!\n");
-  uint64_t which = si->si_value.sival_int;
- 
- 
+  
   uint64_t cur = measure_time();
+  uint64_t which = si->si_value.sival_int;
+  
   uint64_t interval = cur - last[which];
   //last[which] = cur;
   if (interval ==0) {
     DEBUG("INTERVAL WAS 0!!!!!!");
   }
-  if (interval < min[which]) { min[which] = interval; }
-  if (interval > max[which]) { max[which] = interval; }
-
+  
   record_interval(which, num_interrupts[which], interval);
   interval_sum[which] += interval;
   num_interrupts[which] += 1;
@@ -241,75 +185,45 @@ static void handler(int sig, siginfo_t* si, void* priv) {
 static void thread_work(uint64_t which) {
   DEBUG("thread %lu\n", which);
 
-  //uint64_t mypart = (num_ops / num_producers) + (which < (num_ops % num_producers));
-  //uint64_t mypartterminals = (num_consumers / num_producers) + (which < (num_consumers % num_producers));
+  
   uint64_t i;
-  uint64_t avg_int;
-  //uint64_t local_count    = 0;
-  uint64_t gen; 
+  volatile uint64_t gen = 0;
   // wait for all producers and consumers to be ready
   pthread_barrier_wait(&barrier);
-  DEBUG("%lu past barrier\n", which);
-
-  if (which == 0) { // first producer does timing
-    gettimeofday(&start, 0);
-    //start = rdtsc();
-  }
+  
   DEBUG("thread %lu about to start timer\n", which);
   // now schedule a timer interrupt for ourselves
-  if (interrupts) {
-    reset_timer(which);
-    DEBUG("%lu started timer\n", which);
-  }
+  
+  reset_timer(which);
+  DEBUG("%lu started timer\n", which);
+  
 
-  for (i = 0; i < NUM_CYCLES; i++) { //this is the fake work loop
+  for (i = 0; i < AMT_WORK; i++) { //this is the fake work loop
     gen = (uint64_t)make_item(which, rand(), 1);
-    avg_int = gen;
   }
   //DEBUG("\t%lu done with work\n", which);
+  
+
   // turn off further producer interrupts before we add terminal item
-  if (interrupts) {
-    signal(INTERRUPT_SIGNAL, SIG_IGN);
-    //stop_timer(which);
-  }  
-  if (num_interrupts[which]) {
-  	avg_int = interval_sum[which]/num_interrupts[which];
-  	//DEBUG("past the line");
-  } else {
-    avg_int = 0;
-    DEBUG("--had no interrupts\n");
-  }
-  DEBUG("THREAD %lu finish with min: %lu, avg: %lu, max, %lu \n", which, min[which], avg_int, max[which]);
-  atomic_fetch_and_add(&average_interval, avg_int); // add my average time to the mass one
+  signal(INTERRUPT_SIGNAL, SIG_IGN);
+    
 
   // wait again for everyone
   pthread_barrier_wait(&barrier);
   
-  if (which == 0) { // first producer does timing
-   gettimeofday(&end, 0);
-   //end = rdtsc(); // I think this is how this works
-  }
+  
 
   return;
 
 }
-static void print_arrays(int num) {
+static void print_arrays() {
   uint64_t i; 
+  
   for (i=0; i< (num_threads + THREAD_OFFSET); i++) {
-    DEBUG("min %lu : %lu \n", i, min[i]);
+    DEBUG("num_interrupts %lu : %lu \n", i, num_interrupts[i]);
   }
-  for (i=0; i< (num_threads + THREAD_OFFSET); i++) {
-    DEBUG("max %lu : %lu \n", i, max[i]);
-  }
-  if (num > 0) {
-    for (i=0; i< (num_threads + THREAD_OFFSET); i++) {
-      DEBUG("interval_sum %lu : %lu \n", i, interval_sum[i]);
-    }
-    for (i=0; i< (num_threads + THREAD_OFFSET); i++) {
-      DEBUG("num_interrupts %lu : %lu \n", i, num_interrupts[i]);
-    }
 
-  }
+  
 
 
 
@@ -319,9 +233,6 @@ void* worker(void* arg) {
   long mytid = tid[myid];
 
   DEBUG("-Hello from thread %ld (tid %ld)\n", myid, mytid);
-
-  //myid -= THREAD_OFFSET; // eliminate offset so we can compute producer 0.., instead of 2..
-
   uint64_t cpu;
 /* Keeping this part for reference
   if (myid < num_producers) {
@@ -388,20 +299,8 @@ void* worker(void* arg) {
 
 
 void usage() {
-  fprintf(stderr, "usage: harness [-i pc] [-t a] [-p x] [-c y] [-s z] [-h] nump numc size numo\n");
-  fprintf(stderr, "  Execute a producer-consumer system\n");
-  fprintf(stderr, "    nump  = number of producer threads\n");
-  fprintf(stderr, "    numc  = number of consumer threads\n");
-  fprintf(stderr, "    size  = number of slots in queue/ring\n");
-  fprintf(stderr, "    numo  = total number of produce/consume calls\n");
-  fprintf(stderr, "           (they are roughly evenly spread across threads)\n");
-  fprintf(stderr, "    -i pc = produce (p) and/or consume (c) from interrupts\n");
-  fprintf(stderr, "            in addition to threads\n");
-  fprintf(stderr, "    -t a  = interrupts have poisson arrivals with a mean of a (us)\n");
-  fprintf(stderr, "    -p x  = statically map producers across x processors\n");
-  fprintf(stderr, "    -c y  = statically map consumers across y processors\n");
-  fprintf(stderr, "    -s z  = use z as the seed value\n");
-  fprintf(stderr, "    -h    = help (this message)\n");
+  fprintf(stderr, "usage: harness \n");
+  
 }
 
 
@@ -409,53 +308,39 @@ void usage() {
 int main(int argc, char* argv[]) {
   uint64_t i;
   long rc;
-  //uint32_t ring_size;
-  //int opt;
-
-  //num_producers = atol(argv[optind]);
-  //num_consumers = atol(argv[optind + 1]);
-  //num_cpus = get_nprocs();
+  
   num_cpus = get_nprocs_conf();  
   num_threads = num_cpus;
-  average_interval = 0;
-  //ring_size     = atoi(argv[optind + 2]);
-  //num_ops       = atol(argv[optind + 3]);
+
 
   srand(time(NULL));
   
-  if (1 /*interrupt_producers || interrupt_consumers*/) {
-    struct sigaction sa;
+  
+  struct sigaction sa;
 
-    memset(&sa, 0, sizeof(sa));
+  memset(&sa, 0, sizeof(sa));
 
-    sa.sa_sigaction = handler; //Sets interrupt handler!
-    sa.sa_flags    |= SA_SIGINFO;
-    sigemptyset(&sa.sa_mask);
-    sigaddset(&sa.sa_mask, INTERRUPT_SIGNAL); // do not interrupt our own interrupt handler
-    if (sigaction(INTERRUPT_SIGNAL, &sa, 0)) {
-      ERROR("Failed to set up signal handler\n");
-      return -1;
-    }
-
-    // allocate timer array
-    timer = (timer_t*)malloc(sizeof(timer_t) * (num_threads));
-    if (!timer) {
-      ERROR("Failed to allocate timer array\n");
-      return -1;
-    }
-    memset(timer, 0, sizeof(timer_t) * (num_threads));
-    DEBUG("Allocated array of %ld timers\n", num_threads);
+  sa.sa_sigaction = handler; //Sets interrupt handler!
+  sa.sa_flags    |= SA_SIGINFO;
+  sigemptyset(&sa.sa_mask);
+  sigaddset(&sa.sa_mask, INTERRUPT_SIGNAL); // do not interrupt our own interrupt handler
+  if (sigaction(INTERRUPT_SIGNAL, &sa, 0)) {
+    ERROR("Failed to set up signal handler\n");
+    return -1;
   }
 
-
-   min = (uint64_t*)malloc(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)); //array of max interval for each thread
-
-  memset(min, UINT_MAX, sizeof(uint64_t) * (num_threads + THREAD_OFFSET));
-  for (i=0; i< (num_threads + THREAD_OFFSET); i++) {
-    DEBUG("------------- %lu : %lu \n", i, min[i]);
+  // allocate timer array
+  timer = (timer_t*)malloc(sizeof(timer_t) * (num_threads));
+  if (!timer) {
+    ERROR("Failed to allocate timer array\n");
+    return -1;
   }
-  max = (uint64_t*)malloc(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)); //array of max interval for each thread
-  memset(max, 0, sizeof(uint64_t) * (num_threads + THREAD_OFFSET));
+  memset(timer, 0, sizeof(timer_t) * (num_threads));
+  DEBUG("Allocated array of %ld timers\n", num_threads);
+
+
+
+  
 
   last = (uint64_t*)malloc(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)); //array of last interrupt time
   memset(last, 0, sizeof(uint64_t) * (num_threads + THREAD_OFFSET));
@@ -463,8 +348,6 @@ int main(int argc, char* argv[]) {
   num_interrupts = (uint64_t*)malloc(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)); //array of interrupt count for each thread
   memset(num_interrupts, 0, sizeof(uint64_t) * (num_threads + THREAD_OFFSET));
 
-  interval_sum = (uint64_t*)malloc(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)); //array of the sum of intervals for use computing the average
-  memset(interval_sum, 0, sizeof(uint64_t) * (num_threads + THREAD_OFFSET));
 
  
   tid = (pthread_t*)malloc(sizeof(pthread_t) * (num_threads + THREAD_OFFSET));
@@ -519,49 +402,12 @@ int main(int argc, char* argv[]) {
       DEBUG("Done joining with %lu\n", i);
     }
   }
+  print_arrays();
+  
 
-  print_arrays(1);
-  uint64_t min_interval = UINT_MAX;
-  uint64_t max_interval = 0;
-  for (i = THREAD_OFFSET; i < (num_threads + THREAD_OFFSET); i++){
-	if (min[i] < min_interval) { min_interval = min[i]; }
-	if (max[i] > max_interval) { max_interval = max[i]; }
-	DEBUG("CHECKING THREAD %lu at index %lu \n", tid[i], i);
-  }
-  average_interval /= num_threads;
-
-  printf("min: %lu, avg: %lu max: %lu \n", min_interval, average_interval, max_interval);
-
-/*
-  double dur;
-
-  dur = end.tv_sec - start.tv_sec;
-
-  if (end.tv_usec >= start.tv_usec) {
-    dur += (end.tv_usec - start.tv_usec) / 1000000.0;
-  } else {
-    dur += (1000000 + (end.tv_usec - start.tv_usec)) / 1000000.0;
-  }
-
-  printf("Producers:                     %lu\n", num_producers);
-  if (interrupt_producers) {
-    printf("Producer interrupts:           %lu\n", producer_interrupt_count);
-    printf("Producer interrupt successes:  %lu\n", producer_interrupt_successes);
-  }
-  printf("Consumers:                     %lu\n", num_consumers);
-  if (interrupt_consumers) {
-    printf("Consumer interrupts:           %lu\n", consumer_interrupt_count);
-    printf("Consumer interrupt successes:  %lu\n", consumer_interrupt_successes);
-  }
-  printf("Duration:                      %lf seconds\n", dur);
-  printf("Consumed:                      %lu elements\n\n", consumer_count);
-  printf("Throughput:                    %lf elements/s\n", consumer_count / dur);
-*/
   pthread_barrier_destroy(&barrier);
 
   free(tid);
-
-  //ring_destroy(ring);
 
   INFO("Done!\n");
 
