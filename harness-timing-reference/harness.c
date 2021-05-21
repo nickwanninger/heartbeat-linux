@@ -220,6 +220,10 @@ static void print_arrays() {
   
   for (i=0; i< (num_threads + THREAD_OFFSET); i++) {
     DEBUG("num_interrupts %lu : %lu \n", i, num_interrupts[i]);
+    if (num_interrupts[i] > MAX_ENTRIES_PER_THREAD) {
+    	DEBUG("WARNING, TOO MANY ENTRIES!\n");
+    	DEBUG("RUN WITH HIGHER VALUE FOR NUM_ENTRIES_PER_THREAD\n");
+    }
   }
 
   
