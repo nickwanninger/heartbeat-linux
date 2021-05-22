@@ -17,7 +17,7 @@ with open(filepath) as fp:
 		elif line_num == 1: # read max records per thread
 			num_max = int(line.split(' ')[1])
 			print("Max records per thread: " + str(num_max))
-		elif line_num == 2: # skip line
+		elif line_num == 2 or line_num == 5: # skip line
 			continue
 		elif line == "data\n": # set flag to start reading actual data
 			data_encountered = True
@@ -27,7 +27,8 @@ with open(filepath) as fp:
 			record_lengths.append(length)
 			records[tid] = []
 		else: # read data, omitting trailing 0s
-			cur_tid = (int(line_num)-(4+num_threads)) // num_max
+			NUM_OF_TEXT_LINES = 5
+			cur_tid = (int(line_num)-(NUM_OF_TEXT_LINES+num_threads)) // num_max
 
 			if int(line_num) % num_max < record_lengths[cur_tid]:
 				records[cur_tid].append(int(line))
@@ -48,7 +49,7 @@ def cycles_to_usec(cycles, cpu_ghz):
 	cycles_per_usec = cpu_ghz * 1000
 	return cycles / cycles_per_usec
 
-CPU_GHZ = 3.3 # rohiths cpu
+CPU_GHZ = 1.8 # rohiths cpu
 all_intervals_usec = list(map(lambda x: cycles_to_usec(x, CPU_GHZ), all_intervals))
 print("MEAN OF ALL INTERVALS: " + str(np.mean(all_intervals_usec)) + " usec")
 

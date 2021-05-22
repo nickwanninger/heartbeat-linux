@@ -91,6 +91,13 @@ void dump_intervals() {
 		fprintf(fp, "%d %lu\n", i, num_interrupts[i+2]);
 	}
 
+	if (TIMING_METHOD == 0) {
+		fprintf(fp, "timing_method rdtsc\n");
+	}
+	else {
+		fprintf(fp, "timing_method gettimeofday\n");
+	}
+
 	fprintf(fp, "data\n");
 	for (int i = 0; i < num_threads * MAX_ENTRIES_PER_THREAD; ++i) {
 		fprintf(fp, "%lu\n", intervals[i]);
@@ -134,6 +141,9 @@ static inline uint64_t measure_time() {
     uint64_t temp = rdtsc();
     return temp;
   } else {
+  	// TODO Need to put gettimeofday here instead of clock_gettime
+  	// can also replace CLOCK_MONTONIC with CLOCK_REALTIME?
+  	// see https://stackoverflow.com/a/38916054/6668130
     struct timespec t;
     clock_gettime(CLOCK_MONOTONIC, &t);
     return t.tv_sec * 1000000 + t.tv_nsec / 1000;
