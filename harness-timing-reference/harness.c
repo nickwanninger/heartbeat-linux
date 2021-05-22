@@ -84,18 +84,19 @@ void dump_intervals() {
 	// fwrite(intervals, sizeof(uint64_t), sizeof(intervals), f);
 	// fclose(f);
 	fprintf(fp, "num_threads %lu\n", num_threads);
-	fprintf(fp, "max_records_per_thread %d\n", MAX_ENTRIES_PER_THREAD);
-
-	fprintf(fp, "num_records_for_each_thread\n");
-	for (int i = 0; i < num_threads; ++i) {
-		fprintf(fp, "%d %lu\n", i, num_interrupts[i+2]);
-	}
 
 	if (TIMING_METHOD == 0) {
 		fprintf(fp, "timing_method rdtsc\n");
 	}
 	else {
 		fprintf(fp, "timing_method gettimeofday\n");
+	}
+
+
+	fprintf(fp, "max_records_per_thread %d\n", MAX_ENTRIES_PER_THREAD);
+	fprintf(fp, "num_records_per_thread\n");
+	for (int i = 0; i < num_threads; ++i) {
+		fprintf(fp, "%d %lu\n", i, num_interrupts[i+2]);
 	}
 
 	fprintf(fp, "data\n");
