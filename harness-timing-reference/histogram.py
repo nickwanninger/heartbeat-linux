@@ -1,4 +1,5 @@
 import plotly.express as px
+import numpy as np
 
 filepath = 'intervals.data'
 
@@ -9,14 +10,14 @@ records = {} # the actual data
 data_encountered = False # have we read the line that says "data" yet?
 
 with open(filepath) as fp:
-	for idx, line in enumerate(fp):
-		if idx == 0: # read number of threads
+	for line_num, line in enumerate(fp):
+		if line_num == 0: # read number of threads
 			num_threads = int(line.split(' ')[1])
 			print("Number of threads: " + str(num_threads))
-		elif idx == 1: # read max records per thread
+		elif line_num == 1: # read max records per thread
 			num_max = int(line.split(' ')[1])
 			print("Max records per thread: " + str(num_max))
-		elif idx == 2: # skip line
+		elif line_num == 2: # skip line
 			continue
 		elif line == "data\n": # set flag to start reading actual data
 			data_encountered = True
@@ -26,9 +27,9 @@ with open(filepath) as fp:
 			record_lengths.append(length)
 			records[tid] = []
 		else: # read data, omitting trailing 0s
-			cur_tid = (int(idx)-(4+num_threads)) // num_max
+			cur_tid = (int(line_num)-(4+num_threads)) // num_max
 
-			if int(idx) % num_max < record_lengths[cur_tid]:
+			if int(line_num) % num_max < record_lengths[cur_tid]:
 				records[cur_tid].append(int(line))
 
 # sanity check, ensure length of data read is correct
@@ -41,18 +42,24 @@ all_intervals = []
 for k in records:
 	all_intervals += records[k]
 
-NUM_CYCLES_PER_USEC = 1.8 * 10**3 # rohiths CPU is 1.8 GHz
-USECS = 100 # microseconds
-threshold = NUM_CYCLES_PER_USEC * USECS # in cycles
-print("threshold " + str(threshold) + " cycles")
+#### WE READ ALL DATA, NOW PROCESS
 
-k = list(filter(lambda x: x > threshold, all_intervals))
-num_over_thr = len(k)
-print("result " + str(num_over_thr))
+def cycles_to_usec(cycles, cpu_ghz):
+	cycles_per_usec = cpu_ghz * 1000
+	return cycles / cycles_per_usec
 
-num_all_records = len(all_intervals)
-print("total num records " + str(num_all_records))
-print("fraction is " + str(num_over_thr/num_all_records))
+CPU_GHZ = 3.3 # rohiths cpu
+all_intervals_usec = list(map(lambda x: cycles_to_usec(x, CPU_GHZ), all_intervals))
+print("MEAN OF ALL INTERVALS: " + str(np.mean(all_intervals_usec)) + " usec")
 
-fig = px.histogram(k)
-fig.show()
+THRESHOLD_USEC = 30
+print("threshold " + str(THRESHOLD_USEC) + " cycles")
+
+filtered_data = list(filter(lambda x: x == 0, all_intervals_usec))
+
+print("number below threshold " + str(len(filtered_data)))
+print("total data points " + str(len(all_intervals_usec)))
+print("fraction is " + str(len(filtered_data)/len(all_intervals_usec)))
+
+# fig = px.histogram(filtered_data)
+# fig.show()
