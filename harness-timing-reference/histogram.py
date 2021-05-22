@@ -16,7 +16,6 @@ with open(filepath) as fp:
 
 		if not data_encountered:
 			sp = list(map(str.rstrip, line.split(' '))) # split and remove trailing newlines
-			print(sp)
 
 			if sp[0] == "num_threads":
 				num_threads = int(sp[1])
@@ -29,7 +28,6 @@ with open(filepath) as fp:
 			elif sp[0] == "max_records_per_thread":
 				num_max = int(sp[1])
 				print("Max records per thread: " + str(num_max))
-				print(line_num)
 			
 			elif sp[0] == "num_records_per_thread":
 				num_records_per_thread_encountered = True
@@ -49,9 +47,6 @@ with open(filepath) as fp:
 
 			if int(line_num) % num_max < record_lengths[cur_tid]:
 				records[cur_tid].append(int(line))
-
-print(data_encountered)
-print(num_records_per_thread_encountered)
 
 # sanity check, ensure length of data read is correct
 for (tid, length) in enumerate(record_lengths):
