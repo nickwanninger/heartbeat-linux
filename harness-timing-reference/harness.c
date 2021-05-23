@@ -64,6 +64,7 @@ int num_cpus;
 
 // BEGIN code for recording individual intervals per thread
 #define MAX_ENTRIES_PER_THREAD 20000
+// #define MAX_ENTRIES_PER_THREAD 400000
 uint64_t* intervals;
 
 uint64_t* init_intervals_arr() {
@@ -76,7 +77,7 @@ uint64_t* init_intervals_arr() {
 }
 
 inline void record_interval(int tid, int idx, uint64_t val) {
-	intervals[num_threads * tid + idx] = val;
+	intervals[MAX_ENTRIES_PER_THREAD * (tid-2) + idx] = val;
 }
 
 void dump_intervals() {
