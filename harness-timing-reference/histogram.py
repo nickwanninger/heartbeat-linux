@@ -71,11 +71,11 @@ print("MEAN OF ALL INTERVALS: " + str(np.mean(all_intervals_usec)) + " usec")
 THRESHOLD_USEC = 30
 print("threshold " + str(THRESHOLD_USEC) + " cycles")
 
-filtered_data = list(filter(lambda x: x == 0, all_intervals_usec))
+filtered_data = list(filter(lambda x: x < THRESHOLD_USEC, all_intervals_usec))
 
 print("number below threshold " + str(len(filtered_data)))
 print("total data points " + str(len(all_intervals_usec)))
 print("fraction is " + str(len(filtered_data)/len(all_intervals_usec)))
 
-# fig = px.histogram(filtered_data)
-# fig.show()
+fig = px.histogram(all_intervals)
+fig.show()
