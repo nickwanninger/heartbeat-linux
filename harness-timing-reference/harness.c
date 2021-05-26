@@ -41,7 +41,7 @@ pthread_barrier_t barrier;
 
 #define TIMING_METHOD 0 //0 for rdtsc, 1 for gettimeofday
 int interrupts = 1;
-uint64_t interrupt_us = 20; // 10 ms by default
+uint64_t interrupt_us = 100; // 10 ms by default
 uint64_t num_threads;
 
 // in order to match up with gdb:
@@ -56,15 +56,16 @@ pthread_t* tid;   // array of thread ids
 timer_t* timer;
 
 
-#define AMT_WORK 10000000
+#define AMT_WORK 1000000
 uint64_t* last; //array of last interrupt time
 uint64_t* num_interrupts; //array of interrupt count for each thread
 int num_cpus;
 
 
 // BEGIN code for recording individual intervals per thread
-#define MAX_ENTRIES_PER_THREAD 20000
+// #define MAX_ENTRIES_PER_THREAD 20000
 // #define MAX_ENTRIES_PER_THREAD 400000
+#define MAX_ENTRIES_PER_THREAD 800000
 uint64_t* intervals;
 
 uint64_t* init_intervals_arr() {
@@ -182,7 +183,7 @@ static void handler(int sig, siginfo_t* si, void* priv) {
   uint64_t which = si->si_value.sival_int;
   
   uint64_t interval = cur - last[which];
-  //last[which] = cur;
+  
   if (interval ==0) {
     DEBUG("INTERVAL WAS 0!!!!!!");
   }
@@ -190,7 +191,8 @@ static void handler(int sig, siginfo_t* si, void* priv) {
   record_interval(which, num_interrupts[which], interval);
   num_interrupts[which] += 1;
 
-  reset_timer(which);  
+  reset_timer(which); 
+  last[which] = cur;
 }
 
 static void thread_work(uint64_t which) {
