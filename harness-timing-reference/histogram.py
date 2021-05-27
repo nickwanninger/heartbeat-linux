@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 import plotly.express as px
 import numpy as np
 
@@ -76,6 +78,7 @@ def print_statistics(data_list, unit):
 	print("Mean: " + str(np.mean(data_list)) + " " + unit)
 	print("Min:  " + str(np.min(data_list)) + " " + unit)
 	print("Max:  " + str(np.max(data_list)) + " " + unit)
+	print("Std dev:  " + str(np.std(data_list)) + " " + unit)
 	print()
 
 def threshold_list(data_list, low, high, unit):
@@ -100,7 +103,7 @@ all_intervals_usec = convert_cycles_list_to_usec_list(all_intervals, CPU_GHZ)
 print_statistics(all_intervals_usec, "usec")
 
 THRESHOLD_LOW_USEC = 0
-THRESHOLD_HIGH_USEC = 30
+THRESHOLD_HIGH_USEC = 20
 threshold_list(all_intervals_usec, THRESHOLD_LOW_USEC, THRESHOLD_HIGH_USEC, "usec")
 
 fig = px.histogram(all_intervals_usec)

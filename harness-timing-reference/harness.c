@@ -78,7 +78,7 @@ uint64_t* init_intervals_arr() {
 }
 
 inline void record_interval(int tid, int idx, uint64_t val) {
-	intervals[MAX_ENTRIES_PER_THREAD * (tid-2) + idx] = val;
+	intervals[MAX_ENTRIES_PER_THREAD * (tid-THREAD_OFFSET) + idx] = val;
 }
 
 void dump_intervals() {
