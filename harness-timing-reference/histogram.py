@@ -28,7 +28,7 @@ with open(filepath) as fp:
 				# DO SOMETHING WITH TIMING METHOD?
 				print("Timing method: " + sp[1])
 			
-			elif sp[0] == "max_records_per_thread":
+			elif sp[0] == "buffer_size_per_thread":
 				num_max = int(sp[1])
 				print("Max records per thread: " + str(num_max))
 			

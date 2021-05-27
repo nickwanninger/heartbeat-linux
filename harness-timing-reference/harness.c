@@ -30,18 +30,13 @@
 #include "ring.h"
 #include "atomics.h"
 
-
 struct timeval start;
 struct timeval end;
-
-
-#define EXTERMINATE -1ULL
 
 pthread_barrier_t barrier;
 
 #define TIMING_METHOD 0 //0 for rdtsc, 1 for gettimeofday
-int interrupts = 1;
-uint64_t interrupt_us = 100; // 10 ms by default
+#define INTERRUPT_US 100 // 10 ms by default
 uint64_t num_threads;
 
 // in order to match up with gdb:
@@ -55,31 +50,31 @@ pthread_t* tid;   // array of thread ids
 // we need to use timer_create, etc to actually do per-thread timers
 timer_t* timer;
 
-
 #define AMT_WORK 1000000
 uint64_t* last; //array of last interrupt time
 uint64_t* num_interrupts; //array of interrupt count for each thread
 int num_cpus;
 
-
 // BEGIN code for recording individual intervals per thread
-// #define MAX_ENTRIES_PER_THREAD 20000
-// #define MAX_ENTRIES_PER_THREAD 400000
-#define MAX_ENTRIES_PER_THREAD 800000
+// #define BUFFER_SIZE_PER_THREAD 20000
+// #define BUFFER_SIZE_PER_THREAD 400000
+#define BUFFER_SIZE_PER_THREAD 800000
 uint64_t* intervals;
 
 uint64_t* init_intervals_arr() {
-	intervals = (uint64_t*)malloc(sizeof(uint64_t) * num_threads * MAX_ENTRIES_PER_THREAD);
+	intervals = (uint64_t*)malloc(sizeof(uint64_t) * num_threads * BUFFER_SIZE_PER_THREAD);
 	if (!intervals) {
 		ERROR("Failed to allocate intervals array");
 	}
-	memset(intervals, 0, sizeof(uint64_t) * num_threads * MAX_ENTRIES_PER_THREAD);
+	memset(intervals, 0, sizeof(uint64_t) * num_threads * BUFFER_SIZE_PER_THREAD);
 	return intervals;
 }
 
+
 inline void record_interval(int tid, int idx, uint64_t val) {
-	intervals[MAX_ENTRIES_PER_THREAD * (tid-THREAD_OFFSET) + idx] = val;
+	intervals[BUFFER_SIZE_PER_THREAD * (tid-THREAD_OFFSET) + idx] = val;
 }
+
 
 void dump_intervals() {
 	FILE *fp = fopen("intervals.data", "wb");
@@ -95,14 +90,14 @@ void dump_intervals() {
 	}
 
 
-	fprintf(fp, "max_records_per_thread %d\n", MAX_ENTRIES_PER_THREAD);
+	fprintf(fp, "buffer_size_per_thread %d\n", BUFFER_SIZE_PER_THREAD);
 	fprintf(fp, "num_records_per_thread\n");
 	for (int i = 0; i < num_threads; ++i) {
 		fprintf(fp, "%d %lu\n", i, num_interrupts[i+2]);
 	}
 
 	fprintf(fp, "data\n");
-	for (int i = 0; i < num_threads * MAX_ENTRIES_PER_THREAD; ++i) {
+	for (int i = 0; i < num_threads * BUFFER_SIZE_PER_THREAD; ++i) {
 		fprintf(fp, "%lu\n", intervals[i]);
 	}
 }
@@ -112,6 +107,7 @@ void dump_intervals() {
 static inline int get_thread_id() {
   return syscall(SYS_gettid);
 }
+
 
 //used in DEBUG statements
 uint64_t find_my_thread() {
@@ -139,6 +135,7 @@ rdtsc (void)
   return lo | ((uint64_t)(hi) << 32);
 }
 
+
 static inline uint64_t measure_time() {
   if (!TIMING_METHOD) {
     uint64_t temp = rdtsc();
@@ -160,9 +157,9 @@ static void reset_timer(uint64_t which) {
   it.it_interval.tv_sec  = 0;
   it.it_interval.tv_nsec = 0;
   it.it_value.tv_sec     = 0;
-  it.it_value.tv_nsec    = interrupt_us * 1000;
+  it.it_value.tv_nsec    = INTERRUPT_US * 1000;
 
-  //DEBUG("%lu setting repeating timer interrupt for %lu us from now\n", which, interrupt_us);
+  //DEBUG("%lu setting repeating timer interrupt for %lu us from now\n", which, INTERRUPT_US);
   last[which] = measure_time();
   if (timer_settime(timer[which], 0, &it, 0)) {
     ERROR("Failed to set timer?!\n");
@@ -174,9 +171,9 @@ static void* make_item(uint64_t which, uint64_t tag, uint64_t isintr) {
   uint64_t gen = (isintr << 63) + (which << 32) + tag;
   return (void*)gen;
 }
-//
+
+
 // note that printing is dangerous here since it's in signal context
-//
 static void handler(int sig, siginfo_t* si, void* priv) {
   
   uint64_t cur = measure_time();
@@ -195,10 +192,10 @@ static void handler(int sig, siginfo_t* si, void* priv) {
   last[which] = cur;
 }
 
+
 static void thread_work(uint64_t which) {
   DEBUG("thread %lu\n", which);
 
-  
   uint64_t i;
   volatile uint64_t gen = 0;
   // wait for all producers and consumers to be ready
@@ -210,13 +207,11 @@ static void thread_work(uint64_t which) {
   reset_timer(which);
   DEBUG("%lu started timer\n", which);
   
-
   for (i = 0; i < AMT_WORK; i++) { //this is the fake work loop
     gen = (uint64_t)make_item(which, rand(), 1);
   }
   //DEBUG("\t%lu done with work\n", which);
   
-
   // turn off further producer interrupts before we add terminal item
   signal(INTERRUPT_SIGNAL, SIG_IGN);
     
@@ -224,27 +219,21 @@ static void thread_work(uint64_t which) {
   // wait again for everyone
   pthread_barrier_wait(&barrier);
   
-  
-
   return;
-
 }
+
 static void print_arrays() {
   uint64_t i; 
   
   for (i=0; i< (num_threads + THREAD_OFFSET); i++) {
     DEBUG("num_interrupts %lu : %lu \n", i, num_interrupts[i]);
-    if (num_interrupts[i] > MAX_ENTRIES_PER_THREAD) {
+    if (num_interrupts[i] > BUFFER_SIZE_PER_THREAD) {
     	DEBUG("WARNING, TOO MANY ENTRIES!\n");
     	DEBUG("RUN WITH HIGHER VALUE FOR NUM_ENTRIES_PER_THREAD\n");
     }
   }
-
-  
-
-
-
 }
+
 void* worker(void* arg) {
   long myid  = (long)arg;
   long mytid = tid[myid];
@@ -293,25 +282,24 @@ void* worker(void* arg) {
 
   // build timer for the thread here
   // the timer will actually be set in the producer or consumer function
-  if (interrupts) {
-    struct sigevent sev; //so this generates the signal that the code in main then responds to?
 
-    memset(&sev, 0, sizeof(sev));
-    sev.sigev_notify          = SIGEV_THREAD_ID;
-    sev.sigev_signo           = INTERRUPT_SIGNAL;
-    sev._sigev_un._tid        = get_thread_id();
-    sev.sigev_value.sival_int = myid;
+  struct sigevent sev; //so this generates the signal that the code in main then responds to?
 
-    if (timer_create(CLOCK_MONOTONIC, &sev, &timer[myid])) {
-      ERROR("Failed to create timer\n");
-      exit(-1);
-    }
+  memset(&sev, 0, sizeof(sev));
+  sev.sigev_notify          = SIGEV_THREAD_ID;
+  sev.sigev_signo           = INTERRUPT_SIGNAL;
+  sev._sigev_un._tid        = get_thread_id();
+  sev.sigev_value.sival_int = myid;
+
+  if (timer_create(CLOCK_MONOTONIC, &sev, &timer[myid])) {
+    ERROR("Failed to create timer\n");
+    exit(-1);
   }
+
   thread_work(myid);
   DEBUG("Thread done and now exiting\n");
 
   pthread_exit(NULL); // finish - no return value
-
 }
 
 
@@ -319,7 +307,6 @@ void usage() {
   fprintf(stderr, "usage: harness \n");
   
 }
-
 
 
 int main(int argc, char* argv[]) {
@@ -355,18 +342,12 @@ int main(int argc, char* argv[]) {
   memset(timer, 0, sizeof(timer_t) * (num_threads));
   DEBUG("Allocated array of %ld timers\n", num_threads);
 
-
-
-  
-
   last = (uint64_t*)malloc(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)); //array of last interrupt time
   memset(last, 0, sizeof(uint64_t) * (num_threads + THREAD_OFFSET));
 
   num_interrupts = (uint64_t*)malloc(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)); //array of interrupt count for each thread
   memset(num_interrupts, 0, sizeof(uint64_t) * (num_threads + THREAD_OFFSET));
 
-
- 
   tid = (pthread_t*)malloc(sizeof(pthread_t) * (num_threads + THREAD_OFFSET));
 
   if (!tid) {
@@ -375,8 +356,6 @@ int main(int argc, char* argv[]) {
   }
 
   intervals = init_intervals_arr();
-
-
 
   memset(tid, 0, sizeof(sizeof(pthread_t) * (num_threads + THREAD_OFFSET)));
 
@@ -433,4 +412,3 @@ int main(int argc, char* argv[]) {
 
   return 0;
 }
-
