@@ -50,7 +50,7 @@ pthread_t* tid;   // array of thread ids
 // we need to use timer_create, etc to actually do per-thread timers
 timer_t* timer;
 
-#define AMT_WORK 1000000
+uint64_t AMT_WORK = 1000000;
 uint64_t* last; //array of last interrupt time
 uint64_t* num_interrupts; //array of interrupt count for each thread
 int num_cpus;
@@ -58,7 +58,7 @@ int num_cpus;
 // BEGIN code for recording individual intervals per thread
 // #define BUFFER_SIZE_PER_THREAD 20000
 // #define BUFFER_SIZE_PER_THREAD 400000
-#define BUFFER_SIZE_PER_THREAD 100
+uint64_t BUFFER_SIZE_PER_THREAD = 500000;
 uint64_t* intervals;
 
 uint64_t* init_intervals_arr() {
@@ -311,17 +311,57 @@ void* worker(void* arg) {
 
 
 void usage() {
-  fprintf(stderr, "usage: harness \n");
-  
+  fprintf(stderr, "usage: harness [-t nt] [-b buf] [-i int] [-w amt] [-h]\n");
+  fprintf(stderr, "  Execute a producer-consumer system\n");
+  fprintf(stderr, "    -t nt  = number of threads\n");
+  fprintf(stderr, "    -b buf = buffer size\n");
+  fprintf(stderr, "    -i int = target interrupt interval\n");
+  fprintf(stderr, "    -w amt = amount of work\n");
+  fprintf(stderr, "    -h     = help (this message)\n");
 }
+
 
 
 int main(int argc, char* argv[]) {
   uint64_t i;
   long rc;
-  
+  uint32_t ring_size;
+  int opt;
+
   num_cpus = get_nprocs_conf();  
   num_threads = num_cpus;
+
+  while ((opt = getopt(argc, argv, "t:b:i:w")) != -1) {
+    switch (opt) {
+      case 'h':
+        usage();
+        return 0;
+        break;
+      case 't':
+        num_threads = atol(optarg)
+        break;
+      case 'b':
+        BUFFER_SIZE_PER_THREAD =  atol(optarg);
+        break;
+      case 'i':
+        interrupt_us = atol(optarg);
+        break;
+      case 'w':
+        AMT_WORK = atol(optarg);
+        break;
+      default:
+        ERROR("Unknown option %c\n", opt);
+        return -1;
+        break;
+    }
+  }
+
+  if ((argc - optind) != 4) {
+    usage();
+    return -1;
+  }
+
+  
 
 
   srand(time(NULL));
