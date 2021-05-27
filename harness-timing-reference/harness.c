@@ -36,7 +36,7 @@ struct timeval end;
 pthread_barrier_t barrier;
 
 #define TIMING_METHOD 0 //0 for rdtsc, 1 for gettimeofday
-#define INTERRUPT_US 100 // 10 ms by default
+int INTERRUPT_US = 100; // 10 ms by default
 uint64_t num_threads;
 
 // in order to match up with gdb:
@@ -58,7 +58,7 @@ int num_cpus;
 // BEGIN code for recording individual intervals per thread
 // #define BUFFER_SIZE_PER_THREAD 20000
 // #define BUFFER_SIZE_PER_THREAD 400000
-uint64_t BUFFER_SIZE_PER_THREAD = 500000;
+int BUFFER_SIZE_PER_THREAD = 500000;
 uint64_t* intervals;
 
 uint64_t* init_intervals_arr() {
@@ -325,26 +325,26 @@ void usage() {
 int main(int argc, char* argv[]) {
   uint64_t i;
   long rc;
-  uint32_t ring_size;
+ // uint32_t ring_size;
   int opt;
 
   num_cpus = get_nprocs_conf();  
   num_threads = num_cpus;
 
-  while ((opt = getopt(argc, argv, "t:b:i:w")) != -1) {
+  while ((opt = getopt(argc, argv, "t:b:i:w:h")) != -1) {
     switch (opt) {
       case 'h':
         usage();
         return 0;
         break;
       case 't':
-        num_threads = atol(optarg)
+        num_threads = atol(optarg);
         break;
       case 'b':
         BUFFER_SIZE_PER_THREAD =  atol(optarg);
         break;
       case 'i':
-        interrupt_us = atol(optarg);
+	INTERRUPT_US = atol(optarg);
         break;
       case 'w':
         AMT_WORK = atol(optarg);
@@ -355,12 +355,12 @@ int main(int argc, char* argv[]) {
         break;
     }
   }
-
+/*
   if ((argc - optind) != 4) {
     usage();
     return -1;
   }
-
+*/
   
 
 
