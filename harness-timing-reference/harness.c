@@ -26,14 +26,20 @@
 #include <math.h>
 #include <limits.h>
 
+//#include <glib.h>
+
 #include "config.h"
 #include "ring.h"
 #include "atomics.h"
+
+//GHashTable* our_tids;
 
 struct timeval start;
 struct timeval end;
 
 pthread_barrier_t barrier;
+
+#define MEASURE_TIMERS 0
 
 #define TIMING_METHOD 0 //0 for rdtsc, 1 for gettimeofday
 int INTERRUPT_US = 100; // 10 ms by default
@@ -43,7 +49,7 @@ uint64_t num_threads;
 // tid[0] => nothing
 // tid[1] => main
 // tid[2] => 1st producer thread
-#define THREAD_OFFSET 2
+#define THREAD_OFFSET 0
 pthread_t* tid;   // array of thread ids
 
 // array of timer ids, if used - timer[0] => first interrupt producer
@@ -184,8 +190,11 @@ static void* make_item(uint64_t which, uint64_t tag, uint64_t isintr) {
 static void handler(int sig, siginfo_t* si, void* priv) {
   
   uint64_t cur = measure_time();
+#if MEASURE_TIMERS
   uint64_t which = si->si_value.sival_int;
-  
+#else
+  //uint64_t which = g_hash_table_lookup(our_tids, pthread_self());
+#endif
   uint64_t interval = cur - last[which];
   
   if (interval ==0) {
@@ -194,9 +203,10 @@ static void handler(int sig, siginfo_t* si, void* priv) {
   
   record_interval(which, num_interrupts[which], interval);
   num_interrupts[which] += 1;
-
+#if MEASURE_TIMERS
   reset_timer(which); 
   last[which] = cur;
+#endif
 }
 
 
@@ -207,7 +217,7 @@ static void thread_work(uint64_t which) {
   volatile uint64_t gen = 0;
   // wait for all producers and consumers to be ready
   pthread_barrier_wait(&barrier);
-  
+#if MEASURE_TIMERS 
   DEBUG("thread %lu about to start timer\n", which);
   // now schedule a timer interrupt for ourselves
   
@@ -218,7 +228,15 @@ static void thread_work(uint64_t which) {
     gen = (uint64_t)make_item(which, rand(), 1);
   }
   //DEBUG("\t%lu done with work\n", which);
-  
+#else
+  for (i = 0; i < AMT_WORK; i++) {
+    last[which] = measure_time();
+    if (raise(INTERRUPT_SIGNAL)) {
+	   DEBUG("signal didn't work!\n");
+    } 
+  }
+  DEBUG("done with work!\n");
+#endif
   // turn off further producer interrupts before we add terminal item
   signal(INTERRUPT_SIGNAL, SIG_IGN);
     
@@ -297,12 +315,12 @@ void* worker(void* arg) {
   sev.sigev_signo           = INTERRUPT_SIGNAL;
   sev._sigev_un._tid        = get_thread_id();
   sev.sigev_value.sival_int = myid;
-
+#if MEASURE_TIMERS
   if (timer_create(CLOCK_MONOTONIC, &sev, &timer[myid])) {
     ERROR("Failed to create timer\n");
     exit(-1);
   }
-
+#endif
   thread_work(myid);
   DEBUG("Thread done and now exiting\n");
 
@@ -379,7 +397,7 @@ int main(int argc, char* argv[]) {
     ERROR("Failed to set up signal handler\n");
     return -1;
   }
-
+#if MEASURE_TIMERS == 1
   // allocate timer array
   timer = (timer_t*)malloc(sizeof(timer_t) * (num_threads));
   if (!timer) {
@@ -388,7 +406,7 @@ int main(int argc, char* argv[]) {
   }
   memset(timer, 0, sizeof(timer_t) * (num_threads));
   DEBUG("Allocated array of %ld timers\n", num_threads);
-
+#endif
   last = (uint64_t*)malloc(sizeof(uint64_t) * (num_threads + THREAD_OFFSET)); //array of last interrupt time
   memset(last, 0, sizeof(uint64_t) * (num_threads + THREAD_OFFSET));
 
@@ -416,6 +434,9 @@ int main(int argc, char* argv[]) {
 
   INFO("Starting %lu software threads\n", num_threads);
 
+  //our_tids = g_hash_table_new(NULL, NULL);
+
+
   for (i = THREAD_OFFSET; i < (num_threads + THREAD_OFFSET); i++) {
     rc = pthread_create(&(tid[i]), // thread id gets put here
                         NULL,      // use default attributes
@@ -424,6 +445,7 @@ int main(int argc, char* argv[]) {
                         );
     if (rc == 0) {
       DEBUG("Started thread %lu, tid %lu\n", i, tid[i]);
+    //  g_hash_table_insert(our_tids, tid[i], i);
     } else {
       ERROR("Failed to start thread %lu\n", i);
       return -1;
