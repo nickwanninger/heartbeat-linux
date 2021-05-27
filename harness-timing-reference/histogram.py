@@ -11,7 +11,7 @@ filepath = 'intervals.data'
 metadata = {}
 
 num_threads = -1 # how many threads
-num_max = -1 # max number of records per thread
+thread_buffer_size = -1 # max number of records per thread
 record_lengths = [] # how many records are there per thread?
 records = defaultdict(list) # the actual data
 
@@ -23,13 +23,14 @@ with open(filepath) as fp:
 			metadata = json.loads(line)
 			num_threads = metadata["Number of threads"]
 			record_lengths = metadata["Number of records per thread"]
-			num_max = metadata["Buffer size per thread"]
+			thread_buffer_size = metadata["Buffer size per thread"]
 
 			pprint.PrettyPrinter(indent=4).pprint(metadata)
 		else: # read data, omitting trailing 0s
-			cur_tid = (int(line_num)-1) // num_max
+			entry_index = line_num-1
+			cur_tid = entry_index // thread_buffer_size
 
-			if int(line_num) % num_max < record_lengths[cur_tid]:
+			if entry_index % thread_buffer_size < record_lengths[cur_tid]:
 				records[cur_tid].append(int(line))
 print("\nDone reading file\n")
 ### WE'VE READ THE DATA, NOW PROCESS
@@ -37,7 +38,7 @@ print("\nDone reading file\n")
 def sanity_check(record_lengths):
 	# ensure length of data read is correct
 	for (tid, length) in enumerate(record_lengths):
-		assert length <= num_max
+		assert length <= thread_buffer_size
 		assert len(records[tid]) == length
 
 def merge_threads_results(records):
