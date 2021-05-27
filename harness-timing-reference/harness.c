@@ -26,13 +26,13 @@
 #include <math.h>
 #include <limits.h>
 
-//#include <glib.h>
+
 
 #include "config.h"
 #include "ring.h"
 #include "atomics.h"
 
-//GHashTable* our_tids;
+
 
 struct timeval start;
 struct timeval end;
@@ -193,7 +193,7 @@ static void handler(int sig, siginfo_t* si, void* priv) {
 #if MEASURE_TIMERS
   uint64_t which = si->si_value.sival_int;
 #else
-  //uint64_t which = g_hash_table_lookup(our_tids, pthread_self());
+  uint64_t which = find_my_thread();
 #endif
   uint64_t interval = cur - last[which];
   
@@ -434,7 +434,7 @@ int main(int argc, char* argv[]) {
 
   INFO("Starting %lu software threads\n", num_threads);
 
-  //our_tids = g_hash_table_new(NULL, NULL);
+ 
 
 
   for (i = THREAD_OFFSET; i < (num_threads + THREAD_OFFSET); i++) {
@@ -445,7 +445,7 @@ int main(int argc, char* argv[]) {
                         );
     if (rc == 0) {
       DEBUG("Started thread %lu, tid %lu\n", i, tid[i]);
-    //  g_hash_table_insert(our_tids, tid[i], i);
+
     } else {
       ERROR("Failed to start thread %lu\n", i);
       return -1;
