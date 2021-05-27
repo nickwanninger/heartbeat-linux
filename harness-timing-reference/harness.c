@@ -58,7 +58,7 @@ int num_cpus;
 // BEGIN code for recording individual intervals per thread
 // #define BUFFER_SIZE_PER_THREAD 20000
 // #define BUFFER_SIZE_PER_THREAD 400000
-#define BUFFER_SIZE_PER_THREAD 800000
+#define BUFFER_SIZE_PER_THREAD 100
 uint64_t* intervals;
 
 uint64_t* init_intervals_arr() {
@@ -80,23 +80,30 @@ void dump_intervals() {
 	FILE *fp = fopen("intervals.data", "wb");
 	// fwrite(intervals, sizeof(uint64_t), sizeof(intervals), f);
 	// fclose(f);
-	fprintf(fp, "num_threads %lu\n", num_threads);
+	fprintf(fp, "{");
+	fprintf(fp, " \"Number of threads\": %lu,", num_threads);
+	fprintf(fp, " \"Buffer size per thread\": %d,", BUFFER_SIZE_PER_THREAD);
 
 	if (TIMING_METHOD == 0) {
-		fprintf(fp, "timing_method rdtsc\n");
+		fprintf(fp, " \"Timing method\": \"rdtsc\",");
 	}
 	else {
-		fprintf(fp, "timing_method gettimeofday\n");
+		fprintf(fp, " \"Timing method\": \"gettimeofday\",");
 	}
-
-
-	fprintf(fp, "buffer_size_per_thread %d\n", BUFFER_SIZE_PER_THREAD);
-	fprintf(fp, "num_records_per_thread\n");
+	
+	fprintf(fp, " \"Number of records per thread\": [ ");
 	for (int i = 0; i < num_threads; ++i) {
-		fprintf(fp, "%d %lu\n", i, num_interrupts[i+2]);
-	}
+		fprintf(fp, "%lu", num_interrupts[i + THREAD_OFFSET]);
 
-	fprintf(fp, "data\n");
+		if (i < num_threads - 1) {
+			fprintf(fp, ", ");
+		}
+		else {
+			fprintf(fp, " ]");
+		}
+	}
+	fprintf(fp, " }\n");
+
 	for (int i = 0; i < num_threads * BUFFER_SIZE_PER_THREAD; ++i) {
 		fprintf(fp, "%lu\n", intervals[i]);
 	}
@@ -229,7 +236,7 @@ static void print_arrays() {
     DEBUG("num_interrupts %lu : %lu \n", i, num_interrupts[i]);
     if (num_interrupts[i] > BUFFER_SIZE_PER_THREAD) {
     	DEBUG("WARNING, TOO MANY ENTRIES!\n");
-    	DEBUG("RUN WITH HIGHER VALUE FOR NUM_ENTRIES_PER_THREAD\n");
+    	DEBUG("RUN WITH HIGHER VALUE FOR BUFFER_SIZE_PER_THREAD\n");
     }
   }
 }
