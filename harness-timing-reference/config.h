@@ -15,7 +15,7 @@
 
 // Used to to fake interrupts using itimers, one per thread
 #define INTERRUPT_TIMER  ITIMER_REAL    // use realtime timer
-#define INTERRUPT_SIGNAL SIGALRM        // what itimer sends on expiration
+#define INTERRUPT_SIGNAL SIGRTMIN+3        // what itimer sends on expiration
 
 
 uint64_t find_my_thread();
