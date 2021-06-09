@@ -39,7 +39,7 @@ struct timeval end;
 
 pthread_barrier_t barrier;
 
-#define MEASURE_TIMERS 0
+#define MEASURE_TIMERS 1
 
 #define TIMING_METHOD 0 //0 for rdtsc, 1 for gettimeofday
 int INTERRUPT_US = 100; // 10 ms by default
