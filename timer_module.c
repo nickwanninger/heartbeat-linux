@@ -7,7 +7,7 @@
 #include <linux/ktime.h>
 
 #define INTERRUPT_NS 100000 //100us
-#define BUFFER_SIZE 500
+#define BUFFER_SIZE 50000
 #define INFO()
 static struct hrtimer timer;
 static uint64_t inc_count = 0;
@@ -52,7 +52,7 @@ static enum hrtimer_restart timer_handler(struct hrtimer *timer)
         if (inc_count < BUFFER_SIZE)
         {
                 uint64_t cur = record_time();
-                printk("restarting!");
+                //printk("restarting!");
 		agg_interval_sum += cur - intervals[inc_count - 1];
                 return HRTIMER_RESTART;
         }
