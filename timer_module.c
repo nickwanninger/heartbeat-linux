@@ -1,34 +1,43 @@
 #include <linux/init.h>
+
+#include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/hrtimer.h>
 #include <linux/ktime.h>
 
-#define INTERRUPT_NS 100000 // 100 us
-#define BUFFER_SIZE 500000
+#define INTERRUPT_NS 100000 //100us
+#define BUFFER_SIZE 500
 #define INFO()
 static struct hrtimer timer;
 static uint64_t inc_count = 0;
 static uint64_t agg_interval_sum = 0;
 static uint64_t *intervals;
 
-static void process_data()
+
+static void process_data(void);
+static uint64_t record_time(void);
+static uint64_t *init_intervals_arr(void);
+
+
+
+static void process_data(void)
 {
 
         uint64_t avg_interval = agg_interval_sum / inc_count;
-        printk(KERN_INFO "Average interval size: %" PRIu64 "\n", avg_interval);
+        printk(KERN_INFO "Average interval size: %llu\n", avg_interval);
         return;
 }
-static inline uint64_t record_time()
+static inline uint64_t record_time(void)
 {
         uint64_t ts = ktime_get_ns();
         intervals[inc_count] = ts;
         inc_count++;
         return ts;
 }
-static uint64_t *init_intervals_arr()
+static uint64_t *init_intervals_arr(void)
 {
-        intervals = (uint64_t *)kmalloc(sizeof(uint64_t) * BUFFER_SIZE);
+        intervals = (uint64_t *)kmalloc(sizeof(uint64_t) * BUFFER_SIZE, GFP_KERNEL);
         if (!intervals)
         {
                 return NULL;
@@ -39,15 +48,17 @@ static uint64_t *init_intervals_arr()
 
 static enum hrtimer_restart timer_handler(struct hrtimer *timer)
 {
-        hrtimer_forward_now(&timer, ns_to_ktime(INTERRUPT_NS));
+        hrtimer_forward_now(timer, ns_to_ktime(INTERRUPT_NS));
         if (inc_count < BUFFER_SIZE)
         {
                 uint64_t cur = record_time();
-                agg_interval_sum += cur - intervals[inc_count - 1];
+                printk("restarting!");
+		agg_interval_sum += cur - intervals[inc_count - 1];
                 return HRTIMER_RESTART;
         }
         printk(KERN_INFO "finished timer iteration.\n");
-        return HRTIMER_NORESTART;
+        process_data();
+	return HRTIMER_NORESTART;
 }
 
 static int __init timer_init(void)
@@ -55,8 +66,8 @@ static int __init timer_init(void)
         intervals = init_intervals_arr();
         if (!intervals)
         {
-                printk(KERN_ERROR "Failed to allocate intervals array\n");
-                return;
+                printk(KERN_ERR  "Failed to allocate intervals array\n");
+                return 1;
         }
         hrtimer_init(&timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
         timer.function = &timer_handler;
