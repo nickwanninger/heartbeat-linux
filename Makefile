@@ -1,6 +1,7 @@
-obj-m += timer_module.o
+obj-m += heartbeat.o
 
-all: timer_module.ko
+MOD=heartbeat.ko
+all: $(MOD)
 
 
 clean:
@@ -8,14 +9,14 @@ clean:
 
 
 
-timer_module.ko: timer_module.c
+$(MOD): heartbeat.c
 	make -C /lib/modules/$(shell uname -r)/build/ M=$(PWD) modules
 
 
 # insert the module into the kernel
-ins: timer_module.ko
-	sudo insmod timer_module.ko
+ins: $(MOD)
+	sudo insmod $(MOD)
 
 # remove the module from the kernel
 rm:
-	sudo rmmod timer_module.ko
+	sudo rmmod $(MOD)
