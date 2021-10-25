@@ -175,6 +175,6 @@ module_init(heartbeat_init);
 module_exit(heartbeat_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Nick Wanninger");
+MODULE_AUTHOR("Nick Wanninger<ncw@u.northwestern.edu>, Deniz Ulusel<ulusel@u.northwestern.edu>");
 MODULE_DESCRIPTION("Heartbeat Kernel Module");
 MODULE_VERSION("0.1");
