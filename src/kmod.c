@@ -1,6 +1,10 @@
-#include <linux/device.h>  // Header to support the kernel Driver Model
+#include <heartbeat_kmod.h>
+
+#include <linux/sched/task_stack.h>
+#include <linux/sched.h>
+#include <linux/device.h>
 #include <linux/errno.h>
-#include <linux/fs.h>  // Header for the Linux file system support
+#include <linux/fs.h>
 #include <linux/hrtimer.h>
 #include <linux/init.h>
 #include <linux/err.h>
@@ -9,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/smp.h>
+
 
 #define INTERRUPT_US 10
 #define INTERRUPT_NS (INTERRUPT_US * 1000)
@@ -24,8 +29,6 @@ unsigned long hb_cycles(void) {
   asm volatile("rdtsc" : "=a"(lo), "=d"(hi));
   return lo | ((uint64_t)(hi) << 32);
 }
-
-
 
 // The high resolution timer object
 static struct hrtimer timer;
@@ -53,19 +56,22 @@ static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
   // 3. change the instruction pointer to a handler function
   //    that is given by the process through the ioctl interface
   // 4. return from the handler
-  //
-  // some problems:
-  // 1. This module may not be run "on top" of the process (in an
-  //    irq) or even on the same CPU core, so we may need to use
-  //    a fast IPI mechanism to alert another core.
-  // 2. We may not have access to `current` as this handler may be
-  //    independent from interrupts/scheduling
 
-  // printk(KERN_INFO "core: %d %p\n", smp_processor_id(), get_current());
+	struct task_struct *task;
+	struct pt_regs *regs;
   uint64_t now, dt;
-  hrtimer_forward_now(timer, ns_to_ktime(INTERRUPT_NS));
 
-  // return HRTIMER_RESTART;
+	task = current;
+	regs = task_pt_regs(task);
+
+
+
+	if (task->pid != 0 && regs->ip != 0) {
+		printk(KERN_INFO "hb from rip=%lx of pid=%d\n", regs->ip, task->pid);
+	}
+
+
+  hrtimer_forward_now(timer, ns_to_ktime(INTERRUPT_NS));
 
   if (nmeasurements >= MEASUREMENT_COUNT) {
     hb_process_data();
