@@ -94,15 +94,9 @@ static int hb_dev_open(struct inode *inodep, struct file *filep) {
   return 0;
 }
 
-static ssize_t hb_dev_read(struct file *filep, char *buffer, size_t len,
-			   loff_t *offset) {
-  return 0;
-}
+static ssize_t hb_dev_read(struct file *filep, char *buffer, size_t len, loff_t *offset) { return 0; }
 
-static ssize_t hb_dev_write(struct file *filep, const char *buffer, size_t len,
-			    loff_t *offset) {
-  return 0;
-}
+static ssize_t hb_dev_write(struct file *filep, const char *buffer, size_t len, loff_t *offset) { return 0; }
 
 static int hb_dev_release(struct inode *inodep, struct file *filep) {
   printk(KERN_INFO "Device successfully closed\n");
@@ -110,7 +104,18 @@ static int hb_dev_release(struct inode *inodep, struct file *filep) {
 }
 
 static long hb_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
-	return 42;
+  printk("Heartbeat IOCTL\n");
+  if (cmd == HB_INIT) {
+    struct hb_configuration config;
+
+    printk("Heartbeat init %lx\n", arg);
+    if (copy_from_user(&config, (struct hb_configuration *)arg, sizeof(struct hb_configuration))) {
+      return -EINVAL;
+    }
+    printk("hb init at %llx\n", config.handler_address);
+    return 0;
+  }
+  return -EINVAL;
 }
 
 static struct file_operations fops = {
@@ -166,10 +171,10 @@ static int __init heartbeat_init(void) {
 static void __exit heartbeat_exit(void) {
   kfree(measurements);
   hrtimer_cancel(&timer);
-  device_destroy(deviceclass, MKDEV(major, 0));	 // remove the device
-  class_unregister(deviceclass);		 // unregister the device class
-  class_destroy(deviceclass);			 // remove the device class
-  unregister_chrdev(major, DEV_NAME);		 // unregister the major number
+  device_destroy(deviceclass, MKDEV(major, 0));  // remove the device
+  class_unregister(deviceclass);                 // unregister the device class
+  class_destroy(deviceclass);                    // remove the device class
+  unregister_chrdev(major, DEV_NAME);            // unregister the major number
   return;
 }
 
