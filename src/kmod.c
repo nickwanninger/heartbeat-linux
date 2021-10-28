@@ -1,19 +1,17 @@
 #include <heartbeat_kmod.h>
-
-#include <linux/sched/task_stack.h>
-#include <linux/sched.h>
 #include <linux/device.h>
+#include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/hrtimer.h>
 #include <linux/init.h>
-#include <linux/err.h>
 #include <linux/kernel.h>
 #include <linux/ktime.h>
 #include <linux/module.h>
+#include <linux/sched.h>
+#include <linux/sched/task_stack.h>
 #include <linux/slab.h>
 #include <linux/smp.h>
-
 
 #define INTERRUPT_US 10
 #define INTERRUPT_NS (INTERRUPT_US * 1000)
@@ -22,7 +20,6 @@
 #define INFO()
 
 #define DEV_NAME "heartbeat"
-
 
 unsigned long hb_cycles(void) {
   uint32_t lo, hi;
@@ -57,19 +54,16 @@ static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
   //    that is given by the process through the ioctl interface
   // 4. return from the handler
 
-	struct task_struct *task;
-	struct pt_regs *regs;
+  struct task_struct *task;
+  struct pt_regs *regs;
   uint64_t now, dt;
 
-	task = current;
-	regs = task_pt_regs(task);
+  task = current;
+  regs = task_pt_regs(task);
 
-
-
-	if (task->pid != 0 && regs->ip != 0) {
-		printk(KERN_INFO "hb from rip=%lx of pid=%d\n", regs->ip, task->pid);
-	}
-
+  if (task->pid != 0 && regs->ip != 0) {
+    // printk(KERN_INFO "hb from rip=%lx of pid=%d\n", regs->ip, task->pid);
+  }
 
   hrtimer_forward_now(timer, ns_to_ktime(INTERRUPT_NS));
 
@@ -79,7 +73,7 @@ static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
   }
 
   // now = ktime_get_ns();
-	now = hb_cycles();
+  now = hb_cycles();
   dt = now - last_time;
   last_time = now;
 
@@ -101,12 +95,12 @@ static int hb_dev_open(struct inode *inodep, struct file *filep) {
 }
 
 static ssize_t hb_dev_read(struct file *filep, char *buffer, size_t len,
-			loff_t *offset) {
+			   loff_t *offset) {
   return 0;
 }
 
 static ssize_t hb_dev_write(struct file *filep, const char *buffer, size_t len,
-			 loff_t *offset) {
+			    loff_t *offset) {
   return 0;
 }
 
@@ -115,17 +109,20 @@ static int hb_dev_release(struct inode *inodep, struct file *filep) {
   return 0;
 }
 
+static long hb_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
+	return 42;
+}
+
 static struct file_operations fops = {
     .open = hb_dev_open,
     .read = hb_dev_read,
     .write = hb_dev_write,
+    .unlocked_ioctl = hb_ioctl,
     .release = hb_dev_release,
 };
 
-
-
 static int __init heartbeat_init(void) {
-	// first, we create the device node in Linux
+  // first, we create the device node in Linux
   major = register_chrdev(0, DEV_NAME, &fops);
   if (major < 0) {
     printk(KERN_ALERT "fast timer failed to register a major number\n");
@@ -147,7 +144,6 @@ static int __init heartbeat_init(void) {
     printk(KERN_ALERT "Failed to create the device\n");
     return PTR_ERR(device);
   }
-
 
   measurements = (uint64_t *)kmalloc(measurements_size, GFP_KERNEL);
   if (!measurements) {
@@ -173,7 +169,7 @@ static void __exit heartbeat_exit(void) {
   device_destroy(deviceclass, MKDEV(major, 0));	 // remove the device
   class_unregister(deviceclass);		 // unregister the device class
   class_destroy(deviceclass);			 // remove the device class
-  unregister_chrdev(major, DEV_NAME);	 // unregister the major number
+  unregister_chrdev(major, DEV_NAME);		 // unregister the major number
   return;
 }
 
@@ -181,6 +177,8 @@ module_init(heartbeat_init);
 module_exit(heartbeat_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Nick Wanninger<ncw@u.northwestern.edu>, Deniz Ulusel<ulusel@u.northwestern.edu>");
+MODULE_AUTHOR(
+    "Nick Wanninger<ncw@u.northwestern.edu>, Deniz "
+    "Ulusel<ulusel@u.northwestern.edu>");
 MODULE_DESCRIPTION("Heartbeat Kernel Module");
 MODULE_VERSION("0.1");

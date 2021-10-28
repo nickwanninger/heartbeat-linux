@@ -1,9 +1,14 @@
 #pragma once
 
 
+
 // This include file defines types and macros to interact with the kernel
 // module and /dev/heartbeat
 
+#include <linux/ioctl.h>
+
+
+#define HB_INIT _IOW('I','I', struct hb_configuration *)
 
 
 struct hb_configuration {
