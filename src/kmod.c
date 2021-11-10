@@ -13,73 +13,15 @@
 #include <linux/slab.h>
 #include <linux/smp.h>
 
-#define INTERRUPT_US 10
-#define INTERRUPT_NS (INTERRUPT_US * 1000)
 
-#define BUFFER_SIZE 50000
 #define INFO()
 
 #define DEV_NAME "heartbeat"
 
-unsigned long hb_cycles(void) {
-  uint32_t lo, hi;
-  asm volatile("rdtsc" : "=a"(lo), "=d"(hi));
-  return lo | ((uint64_t)(hi) << 32);
-}
-
-// The high resolution timer object
-static struct hrtimer timer;
-
-#define MEASUREMENT_COUNT 50000
-static long nmeasurements = 0;
-static size_t measurements_size = MEASUREMENT_COUNT * sizeof(uint64_t);
-static uint64_t *measurements;
-static uint64_t last_time = 0;
-
-static void hb_process_data(void) {
-  uint64_t total = 0;
-  int i;
-  for (i = 0; i < MEASUREMENT_COUNT; i++) {
-    total += measurements[i];
-    // printk(KERN_INFO " meas[%d] = %lluus\n", i, measurements[i] / 1000);
-  }
-  printk(KERN_INFO "Average interval: %llu\n", (total / MEASUREMENT_COUNT));
-  return;
-}
 
 static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
-  // 1. get the ptregs from the process
-  // 2. setup the stack of the process to emulate a function call
-  // 3. change the instruction pointer to a handler function
-  //    that is given by the process through the ioctl interface
-  // 4. return from the handler
 
-  struct task_struct *task;
-  struct pt_regs *regs;
-  uint64_t now, dt;
-
-  task = current;
-  regs = task_pt_regs(task);
-
-  if (task->pid != 0 && regs->ip != 0) {
-    // printk(KERN_INFO "hb from rip=%lx of pid=%d\n", regs->ip, task->pid);
-  }
-
-  hrtimer_forward_now(timer, ns_to_ktime(INTERRUPT_NS));
-
-  if (nmeasurements >= MEASUREMENT_COUNT) {
-    hb_process_data();
-    return HRTIMER_NORESTART;
-  }
-
-  // now = ktime_get_ns();
-  now = hb_cycles();
-  dt = now - last_time;
-  last_time = now;
-
-  measurements[nmeasurements++] = dt;
-
-  return HRTIMER_RESTART;
+  return HRTIMER_NORESTART;
 }
 
 static int major;
@@ -88,7 +30,22 @@ static int numberOpens = 0;
 static struct class *deviceclass = NULL;
 static struct device *device = NULL;
 
+
+struct hb_priv {
+	struct hrtimer timer;
+	off_t return_address;
+};
+
 static int hb_dev_open(struct inode *inodep, struct file *filep) {
+	struct hb_priv *hb;
+
+
+	filep->private_data = (struct hb_priv*)kmalloc(sizeof(struct hb_priv), GFP_KERNEL);
+	hb = filep->private_data;
+
+
+	hrtimer_init(&hb->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+
   numberOpens++;
   printk(KERN_INFO "Device has been opened %d time(s)\n", numberOpens);
   return 0;
@@ -99,20 +56,34 @@ static ssize_t hb_dev_read(struct file *filep, char *buffer, size_t len, loff_t 
 static ssize_t hb_dev_write(struct file *filep, const char *buffer, size_t len, loff_t *offset) { return 0; }
 
 static int hb_dev_release(struct inode *inodep, struct file *filep) {
-  printk(KERN_INFO "Device successfully closed\n");
+
+	struct hb_priv *hb;
+
+
+	hb = filep->private_data;
+  printk(KERN_INFO "Device successfully closed %lx\n", (off_t)filep->private_data);
+
+
+	hrtimer_cancel(&hb->timer);
+	kfree(filep->private_data);
   return 0;
 }
 
 static long hb_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
+	struct hb_priv *hb;
+	hb = file->private_data;
   printk("Heartbeat IOCTL\n");
-  if (cmd == HB_INIT) {
+  if (cmd == HB_SCHEDULE) {
     struct hb_configuration config;
 
     printk("Heartbeat init %lx\n", arg);
     if (copy_from_user(&config, (struct hb_configuration *)arg, sizeof(struct hb_configuration))) {
       return -EINVAL;
     }
-    printk("hb init at %llx\n", config.handler_address);
+    printk("hb init at %lx\n", config.handler_address);
+		uint64_t ns = config.interval * 1000;
+
+		hrtimer_start(&hb->timer, ns_to_ktime(ns), ns);
     return 0;
   }
   return -EINVAL;
@@ -150,27 +121,14 @@ static int __init heartbeat_init(void) {
     return PTR_ERR(device);
   }
 
-  measurements = (uint64_t *)kmalloc(measurements_size, GFP_KERNEL);
-  if (!measurements) {
-    printk(KERN_ERR "Failed to allocate measurements array\n");
-    return 1;
-  }
-
-  hrtimer_init(&timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-  timer.function = &hb_timer_handler;
-
-  // initialize last_time
-  last_time = hb_cycles();
-
-  hrtimer_start(&timer, ns_to_ktime(INTERRUPT_NS), INTERRUPT_NS);
   printk(KERN_INFO "started timer_module!\n");
 
   return 0;
 }
 
 static void __exit heartbeat_exit(void) {
-  kfree(measurements);
-  hrtimer_cancel(&timer);
+  // kfree(measurements);
+  // hrtimer_cancel(&timer);
   device_destroy(deviceclass, MKDEV(major, 0));  // remove the device
   class_unregister(deviceclass);                 // unregister the device class
   class_destroy(deviceclass);                    // remove the device class

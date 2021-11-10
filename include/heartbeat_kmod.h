@@ -8,7 +8,7 @@
 #include <linux/ioctl.h>
 
 
-#define HB_INIT _IOW('I','I', struct hb_configuration *)
+#define HB_SCHEDULE _IOW('I','I', struct hb_configuration *)
 
 
 struct hb_configuration {
