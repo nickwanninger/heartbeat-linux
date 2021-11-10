@@ -20,15 +20,21 @@ struct hb_thread_info {
   // of microseconds on each heartbeat
   uint64_t interval;
   hb_callback_t callback;
-  int mask;
+  volatile int mask;
 };
 
 static __thread struct hb_thread_info info;
 
 
 void hb_entry_high() {
+
+	if (info.mask) return;
+
+
+	info.mask = 1;
 	if (info.callback)
 		info.callback();
+	info.mask = 0;
 }
 
 
@@ -47,6 +53,7 @@ int hb_init(int cpu) {
   info.callback = NULL;
   info.interval = 0;
   info.callback = _hb_entry;
+	info.mask = 0;
   return 0;
 }
 
@@ -59,10 +66,11 @@ void hb_exit(void) {
 
 
 // schedule the next heartbeat
-static void hb_schedule(uint64_t us) {
+static void hb_schedule(uint64_t us, int repeat) {
   struct hb_configuration config;
   config.interval = us;
   config.handler_address = (off_t)_hb_entry;
+	config.repeat = repeat;
   if (hbfd != 0) {
     ioctl(hbfd, HB_SCHEDULE, &config);
   }
@@ -75,7 +83,7 @@ int hb_oneshot(uint64_t us, hb_callback_t callback) {
   info.interval = 0;
   info.callback = callback;
 
-  hb_schedule(us);
+  hb_schedule(us, 0);
   return 0;
 }
 
@@ -83,7 +91,7 @@ int hb_oneshot(uint64_t us, hb_callback_t callback) {
 int hb_repeat(uint64_t us, hb_callback_t callback) {
   info.interval = us;
   info.callback = callback;
-  hb_schedule(us);
+  hb_schedule(us, 1);
   return 0;
 }
 
@@ -97,7 +105,7 @@ int hb_cancel(void) {
 
   // scheduling a time of zero is a special
   // case that cancels timers.
-  hb_schedule(0);
+  hb_schedule(0, 0);
 
   return 1;
 }

@@ -2,10 +2,9 @@
 .section .text
 .global _hb_entry
 _hb_entry:
-	pushq %rbp
-	movq %rsp, %rbp
 
 
+	pushf
   pushq %r15
   pushq %r14
   pushq %r13
@@ -40,9 +39,7 @@ _hb_entry:
   popq %r13
   popq %r14
   popq %r15
-	
-
-	popq %rbp
+	popf
 
 	popq %rsp
 

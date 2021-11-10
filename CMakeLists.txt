@@ -17,4 +17,4 @@ add_library(hb SHARED
 add_executable(ex
 	example/example.c)
 
-target_link_libraries(ex PUBLIC hb)
+target_link_libraries(ex PUBLIC hb pthread)

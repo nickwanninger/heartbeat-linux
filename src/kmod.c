@@ -28,6 +28,7 @@ struct hb_priv {
   struct task_struct *owner;
   off_t return_address;
 	uint64_t interval_us;
+	int repeat;
 };
 
 static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
@@ -42,7 +43,7 @@ static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
   // If the target thread is not running, schedule it again
 	// at the same interval, hoping it schedules
   if (current != hb->owner) {
-    printk("hmm..\n");
+    // printk("hmm..\n");
   	// return HRTIMER_NORESTART;
     return HRTIMER_RESTART;
   }
@@ -64,6 +65,11 @@ static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
 	// store the old sp on the stack so we can restore to it (redzone is bad.)
   copy_to_user((void *)regs->sp, &old_sp, sizeof(regs->ip));
   regs->ip = hb->return_address;
+
+	if (hb->repeat) {
+		hrtimer_forward_now(timer, ns_to_ktime(hb->interval_us * 1000));
+		return HRTIMER_RESTART;
+	}
   return HRTIMER_NORESTART;
 }
 
@@ -117,6 +123,7 @@ static long hb_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
 		hb->interval_us = config.interval;
     hb->owner = current;
     hb->return_address = config.handler_address;
+		hb->repeat = config.repeat;
 
   	hrtimer_forward_now(&hb->timer, ns_to_ktime(ns));
     hrtimer_start(&hb->timer, ns_to_ktime(ns), HRTIMER_MODE_REL);

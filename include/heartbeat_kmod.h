@@ -18,4 +18,11 @@ struct hb_configuration {
 	// should occur at. In testing, this is only limited
 	// on the lower bound by 2us
 	unsigned long interval;
+
+	// repeat in the kernel instead of waiting for a oneshot.
+	// This is a little dangerous on small intervals, as your callback
+	// may take longer than expected and will need to be small and re-entrant
+	// TODO: how do we want to cancel?
+	int repeat;
+	
 };
