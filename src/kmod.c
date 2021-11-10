@@ -118,7 +118,8 @@ static long hb_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
     hb->owner = current;
     hb->return_address = config.handler_address;
 
-    hrtimer_start(&hb->timer, ns_to_ktime(ns), ns);
+  	hrtimer_forward_now(&hb->timer, ns_to_ktime(ns));
+    hrtimer_start(&hb->timer, ns_to_ktime(ns), HRTIMER_MODE_REL);
     return 0;
   }
   return -EINVAL;

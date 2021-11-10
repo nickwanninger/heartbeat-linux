@@ -27,16 +27,14 @@ int main(int argc, char **argv) {
   int res = hb_init(0);
   for (int i = 0; 1; i++) {
     done = 0;
-    uint64_t start = hb_cycles();
-    hb_oneshot(100, callback);
+    uint64_t start = time_us();
+    hb_oneshot(10, callback);
 
     while (!done) {
     }
 
-    uint64_t end = hb_cycles();
-    if ((i % 1000) == 0) {
-      printf("%3d: %lu\n", i, end - start);
-    }
+    uint64_t end = time_us();
+    printf("%3d: %lu\n", i, end - start);
   }
   hb_exit();
 
