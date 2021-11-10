@@ -13,77 +13,112 @@
 #include <linux/slab.h>
 #include <linux/smp.h>
 
-
-#define INFO()
-
+#define INFO(...) printk(KERN_INFO "Heartbeat: " __VA_ARGS__)
 #define DEV_NAME "heartbeat"
 
-
-static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
-
-  return HRTIMER_NORESTART;
-}
-
+#undef INFO
+#define INFO(...)
 static int major;
-static int numberOpens = 0;
-
 static struct class *deviceclass = NULL;
 static struct device *device = NULL;
 
 
 struct hb_priv {
-	struct hrtimer timer;
-	off_t return_address;
+  struct hrtimer timer;
+  struct task_struct *owner;
+  off_t return_address;
+	uint64_t interval_us;
 };
 
+static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
+  struct hb_priv *hb;
+  struct pt_regs *regs;
+  hb = container_of(timer, struct hb_priv, timer);
+
+
+    // printk("hmm..\n");
+	hrtimer_forward_now(timer, ns_to_ktime(hb->interval_us * 1000));
+
+  // If the target thread is not running, schedule it again
+	// at the same interval, hoping it schedules
+  if (current != hb->owner) {
+    printk("hmm..\n");
+  	// return HRTIMER_NORESTART;
+    return HRTIMER_RESTART;
+  }
+
+  regs = task_pt_regs(hb->owner);
+
+	if (regs == NULL) {
+		printk("huhh!\n");
+	}
+  // printk("pc=%llx, sp=%llx. We need to swap to %llx\n", regs->ip, regs->sp, hb->return_address);
+
+
+	uint64_t old_sp = regs->sp;
+
+  // redzone is bad.
+  regs->sp -= 128;
+  copy_to_user((void *)regs->sp, &regs->ip, sizeof(regs->ip));
+  regs->sp -= 8;
+	// store the old sp on the stack so we can restore to it (redzone is bad.)
+  copy_to_user((void *)regs->sp, &old_sp, sizeof(regs->ip));
+  regs->ip = hb->return_address;
+  return HRTIMER_NORESTART;
+}
+
+
+
 static int hb_dev_open(struct inode *inodep, struct file *filep) {
-	struct hb_priv *hb;
+  struct hb_priv *hb;
+
+  hb = filep->private_data = kmalloc(sizeof(struct hb_priv), GFP_KERNEL);
 
 
-	filep->private_data = (struct hb_priv*)kmalloc(sizeof(struct hb_priv), GFP_KERNEL);
-	hb = filep->private_data;
+  hb->owner = current;
+
+  memset(filep->private_data, 0, sizeof(struct hb_priv));
+  INFO("Private data after: %p\n", filep->private_data);
 
 
-	hrtimer_init(&hb->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+  hrtimer_init(&hb->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+  hb->timer.function = hb_timer_handler;
 
-  numberOpens++;
-  printk(KERN_INFO "Device has been opened %d time(s)\n", numberOpens);
   return 0;
 }
 
-static ssize_t hb_dev_read(struct file *filep, char *buffer, size_t len, loff_t *offset) { return 0; }
-
-static ssize_t hb_dev_write(struct file *filep, const char *buffer, size_t len, loff_t *offset) { return 0; }
-
 static int hb_dev_release(struct inode *inodep, struct file *filep) {
+  struct hb_priv *hb;
 
-	struct hb_priv *hb;
+  hb = filep->private_data;
+  INFO("Closed heartbeat device %p\n", (off_t)filep->private_data);
 
-
-	hb = filep->private_data;
-  printk(KERN_INFO "Device successfully closed %lx\n", (off_t)filep->private_data);
-
-
-	hrtimer_cancel(&hb->timer);
-	kfree(filep->private_data);
+  hrtimer_cancel(&hb->timer);
+  kfree(filep->private_data);
+	filep->private_data = NULL;
   return 0;
 }
 
 static long hb_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
-	struct hb_priv *hb;
-	hb = file->private_data;
-  printk("Heartbeat IOCTL\n");
+  struct hb_priv *hb;
+  hb = file->private_data;
+
+  INFO("%d Heartbeat IOCTL %llx from current=%llx\n", smp_processor_id(), hb, current);
+
+  // sanity check.
+  if (hb == NULL) return -EINVAL;
+
   if (cmd == HB_SCHEDULE) {
     struct hb_configuration config;
-
-    printk("Heartbeat init %lx\n", arg);
     if (copy_from_user(&config, (struct hb_configuration *)arg, sizeof(struct hb_configuration))) {
       return -EINVAL;
     }
-    printk("hb init at %lx\n", config.handler_address);
-		uint64_t ns = config.interval * 1000;
+    uint64_t ns = config.interval * 1000;
+		hb->interval_us = config.interval;
+    hb->owner = current;
+    hb->return_address = config.handler_address;
 
-		hrtimer_start(&hb->timer, ns_to_ktime(ns), ns);
+    hrtimer_start(&hb->timer, ns_to_ktime(ns), ns);
     return 0;
   }
   return -EINVAL;
@@ -91,13 +126,13 @@ static long hb_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
 
 static struct file_operations fops = {
     .open = hb_dev_open,
-    .read = hb_dev_read,
-    .write = hb_dev_write,
     .unlocked_ioctl = hb_ioctl,
     .release = hb_dev_release,
 };
 
 static int __init heartbeat_init(void) {
+  deviceclass = NULL;
+  device = NULL;
   // first, we create the device node in Linux
   major = register_chrdev(0, DEV_NAME, &fops);
   if (major < 0) {
@@ -127,8 +162,6 @@ static int __init heartbeat_init(void) {
 }
 
 static void __exit heartbeat_exit(void) {
-  // kfree(measurements);
-  // hrtimer_cancel(&timer);
   device_destroy(deviceclass, MKDEV(major, 0));  // remove the device
   class_unregister(deviceclass);                 // unregister the device class
   class_destroy(deviceclass);                    // remove the device class
