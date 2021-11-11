@@ -9,8 +9,8 @@ include_directories(include)
 
 # creates libhb.so
 add_library(hb SHARED
-	lib/heartbeat.c
-	lib/entry.S
+	src/heartbeat.c
+	src/entry.S
 	)
 
 
