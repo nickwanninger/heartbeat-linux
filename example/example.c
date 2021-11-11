@@ -29,41 +29,40 @@ long interval = 1000;
 void callback(void) { done = 1; }
 
 void *work(void *v) {
-	int core = (off_t)v;
-	printf("starting on core %d\n", core);
+  int core = (off_t)v;
+  printf("starting on core %d\n", core);
 
-	int tid = gettid();
+  int tid = gettid();
   int res = hb_init(core);
   for (int i = 0; 1; i++) {
     uint64_t start = time_us();
     hb_oneshot(interval, callback);
 
-		long iters = 0;
-    while (!done) {
-			iters++;
-    }
+    long iters = 0;
+    while (!done)
+      iters++;
 
     uint64_t end = time_us();
-    // printf("%3d: %lu %ld\n", i, end - start, iters);
+    printf("%3d: %lu %ld\n", i, end - start, iters);
     done = 0;
   }
   hb_exit();
 
-	return v;
+  return v;
 }
 
 int main(int argc, char **argv) {
-	int nproc = 12;
-	pthread_t threads[nproc];
+  int nproc = 1;
+  pthread_t threads[nproc];
 
-	for (off_t i = 0; i < nproc; i++) {
-		pthread_create(&threads[i], NULL, work, (void*)i);
-	}
+  for (off_t i = 0; i < nproc; i++) {
+    pthread_create(&threads[i], NULL, work, (void *)i);
+  }
 
 
-	for (int i = 0; i < nproc; i++) {
-		pthread_join(threads[i], NULL);
-	}
+  for (int i = 0; i < nproc; i++) {
+    pthread_join(threads[i], NULL);
+  }
 
   return 0;
 }

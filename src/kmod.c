@@ -36,15 +36,9 @@ static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
   struct pt_regs *regs;
   hb = container_of(timer, struct hb_priv, timer);
 
-
-    // printk("hmm..\n");
-	hrtimer_forward_now(timer, ns_to_ktime(hb->interval_us * 1000));
-
   // If the target thread is not running, schedule it again
 	// at the same interval, hoping it schedules
   if (current != hb->owner) {
-    // printk("hmm..\n");
-  	// return HRTIMER_NORESTART;
     return HRTIMER_RESTART;
   }
 
