@@ -30,6 +30,7 @@ struct hb_priv {
   off_t return_address;
 	uint64_t interval_us;
 	int repeat;
+	int core;
 };
 
 static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
@@ -69,6 +70,18 @@ static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
 }
 
 
+static void hb_cleanup_on_core(void *arg) {
+  struct hb_priv *hb;
+	hb = arg;
+
+	printk("cleanup on core %d\n", hb->core);
+  hrtimer_cancel(&hb->timer);
+  kfree(hb);
+
+
+}
+
+
 
 static int hb_dev_open(struct inode *inodep, struct file *filep) {
   struct hb_priv *hb;
@@ -94,8 +107,11 @@ static int hb_dev_release(struct inode *inodep, struct file *filep) {
   hb = filep->private_data;
   INFO("Closed heartbeat device %p\n", (off_t)filep->private_data);
 
-  hrtimer_cancel(&hb->timer);
-  kfree(filep->private_data);
+	// call on the owner core, and don't wait
+	smp_call_function_single(hb->core, hb_cleanup_on_core, hb, false);
+
+	filep->private_data = NULL;
+
 	filep->private_data = NULL;
   return 0;
 }
@@ -118,6 +134,8 @@ static long hb_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
 		hb->interval_us = config.interval;
     hb->owner = current;
     hb->return_address = config.handler_address;
+		// the core owner of the hrtimer
+		hb->core = smp_processor_id();
 		hb->repeat = config.repeat;
 
   	hrtimer_forward_now(&hb->timer, ns_to_ktime(ns));

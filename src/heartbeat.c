@@ -27,33 +27,30 @@ static __thread struct hb_thread_info info;
 
 
 void hb_entry_high() {
+  if (info.mask) return;
 
-	if (info.mask) return;
 
-
-	info.mask = 1;
-	if (info.callback)
-		info.callback();
-	info.mask = 0;
+  info.mask = 1;
+  if (info.callback) info.callback();
+  info.mask = 0;
 }
 
 
 
 int hb_init(int cpu) {
-  if (hbfd != 0) return -EEXIST;
-  hbfd = open("/dev/heartbeat", O_RDWR);
-
   cpu_set_t my_set;                                 /* Define your cpu_set bit mask. */
   CPU_ZERO(&my_set);                                /* Initialize it all to 0, i.e. no CPUs selected. */
   CPU_SET(cpu, &my_set);                            /* set the bit that represents core 7. */
   sched_setaffinity(0, sizeof(cpu_set_t), &my_set); /* Set affinity of tihs process to */
   sched_yield();
 
+  if (hbfd != 0) return -EEXIST;
+  hbfd = open("/dev/heartbeat", O_RDWR);
   if (hbfd <= 0) return -1;
   info.callback = NULL;
   info.interval = 0;
   info.callback = _hb_entry;
-	info.mask = 0;
+  info.mask = 0;
   return 0;
 }
 
@@ -70,7 +67,7 @@ static void hb_schedule(uint64_t us, int repeat) {
   struct hb_configuration config;
   config.interval = us;
   config.handler_address = (off_t)_hb_entry;
-	config.repeat = repeat;
+  config.repeat = repeat;
   if (hbfd != 0) {
     ioctl(hbfd, HB_SCHEDULE, &config);
   }
