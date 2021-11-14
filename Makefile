@@ -14,7 +14,7 @@ clean:
 
 build/libhb.so: src/heartbeat.c src/entry.S
 	@mkdir -p build
-	@gcc -Iinclude -shared -o $@ -fPIC $^
+	gcc -Iinclude -shared -o $@ -fPIC $^
 
 
 build/ex: build/libhb.so example/example.c
