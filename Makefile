@@ -4,7 +4,7 @@ heartbeat-objs := src/kmod.o
 EXTRA_CFLAGS:=-I$(PWD)/include
 MOD=heartbeat.ko
 
-default: build/libhb.so build/ex
+default: build/ex
 
 clean:
 	rm -rf build
@@ -17,7 +17,8 @@ build/libhb.so: src/heartbeat.c src/entry.S
 	gcc -Iinclude -shared -o $@ -fPIC $^
 
 
-build/ex: build/libhb.so example/example.c
+build/ex:  example/example.c src/heartbeat.c src/entry.S
+	@mkdir -p build
 	gcc -pthread -o $@ -Iinclude $^
 
 
