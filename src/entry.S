@@ -45,4 +45,4 @@ _hb_entry:
 
 	# %rsp is now the interrupted context's rsp, so we cannot use
 	# `ret` to go back to the old contex
-	jmp -128(%rsp)
+	jmp *-128(%rsp)

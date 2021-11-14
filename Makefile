@@ -4,19 +4,21 @@ heartbeat-objs := src/kmod.o
 EXTRA_CFLAGS:=-I$(PWD)/include
 MOD=heartbeat.ko
 
-default:
-	mkdir -p build
-	cd build && cmake ../ && make -j
-	cp build/compile_commands.json .
+default: build/libhb.so build/ex
 
 clean:
 	rm -rf build
 	make -C /lib/modules/$(shell uname -r)/build/ M=$(PWD) clean
 
 
-build/user: src/user.c
-	@clang $(EXTRA_CFLAGS) -o build/user src/user.c
 
+build/libhb.so: src/heartbeat.c src/entry.S
+	@mkdir -p build
+	@gcc -Iinclude -shared -o $@ -fPIC $^
+
+
+build/ex: build/libhb.so example/example.c
+	gcc -pthread -o $@ -Iinclude $^
 
 
 # run `make kmod` to build the kernel module
