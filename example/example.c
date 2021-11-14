@@ -16,6 +16,8 @@ unsigned long hb_cycles(void) {
   return lo | ((uint64_t)(hi) << 32);
 }
 
+extern void dumb(void);
+
 
 uint64_t time_us(void) {
   struct timeval tv;
@@ -33,13 +35,15 @@ void *work(void *v) {
   printf("starting on core %d\n", core);
 
   int res = hb_init(core);
-  for (int i = 0; 1; i++) {
+  for (int i = 0; i < 1000; i++) {
     uint64_t start = time_us();
     hb_oneshot(interval, callback);
 
     long iters = 0;
-    while (!done)
+    while (!done) {
+	    // dumb();
       iters++;
+    }
 
     uint64_t end = time_us();
     printf("%3d: %lu %ld\n", i, end - start, iters);
@@ -51,7 +55,12 @@ void *work(void *v) {
 }
 
 int main(int argc, char **argv) {
-  int nproc = 1;
+
+	// work(0);
+
+	// return 0;
+
+  int nproc = 1; // sysconf(_SC_NPROCESSORS_ONLN);
   pthread_t threads[nproc];
 
   for (off_t i = 0; i < nproc; i++) {

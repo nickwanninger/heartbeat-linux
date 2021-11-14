@@ -9,6 +9,7 @@
 
 
 #define HB_SCHEDULE _IOW('I','I', struct hb_configuration *)
+#define HB_SPIN _IOW('S','S', int)
 
 
 struct hb_configuration {

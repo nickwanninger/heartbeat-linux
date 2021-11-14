@@ -25,6 +25,10 @@ struct hb_thread_info {
 
 static __thread struct hb_thread_info info;
 
+void dumb(void) {
+	int x;
+	ioctl(hbfd, HB_SPIN, &x);
+}
 
 void hb_entry_high() {
   if (info.mask) return;

@@ -44,7 +44,7 @@ static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
     return HRTIMER_RESTART;
   }
 
-  regs = task_pt_regs(hb->owner);
+  regs = task_pt_regs(current);
 
 	if (regs == NULL) {
 		printk("huhh!\n");
@@ -108,22 +108,30 @@ static int hb_dev_release(struct inode *inodep, struct file *filep) {
   INFO("Closed heartbeat device %p\n", (off_t)filep->private_data);
 
 	// call on the owner core, and don't wait
-	smp_call_function_single(hb->core, hb_cleanup_on_core, hb, false);
+	smp_call_function_single(hb->core, hb_cleanup_on_core, hb, true);
 
 	filep->private_data = NULL;
 
-	filep->private_data = NULL;
   return 0;
 }
 
+static volatile int glob = 0;
+
 static long hb_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
   struct hb_priv *hb;
+  int i;
   hb = file->private_data;
 
   INFO("%d Heartbeat IOCTL %llx from current=%llx\n", smp_processor_id(), hb, current);
 
   // sanity check.
   if (hb == NULL) return -EINVAL;
+
+  if (cmd == HB_SPIN) {
+  
+	 for (i = 0; i < 10000000; i++) glob += 1;
+	 return 0;
+  }
 
   if (cmd == HB_SCHEDULE) {
     struct hb_configuration config;
