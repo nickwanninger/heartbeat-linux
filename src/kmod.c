@@ -12,6 +12,7 @@
 #include <linux/sched/task_stack.h>
 #include <linux/slab.h>
 #include <linux/smp.h>
+#include <linux/uaccess.h>
 
 #define INFO(...) printk(KERN_INFO "Heartbeat: " __VA_ARGS__)
 #define DEV_NAME "heartbeat"
