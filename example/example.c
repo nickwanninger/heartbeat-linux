@@ -32,7 +32,6 @@ void *work(void *v) {
   int core = (off_t)v;
   printf("starting on core %d\n", core);
 
-  int tid = gettid();
   int res = hb_init(core);
   for (int i = 0; 1; i++) {
     uint64_t start = time_us();
