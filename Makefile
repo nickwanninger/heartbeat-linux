@@ -38,3 +38,15 @@ ins: $(MOD)
 # remove the module from the kernel
 rm:
 	sudo rmmod $(MOD)
+
+test:
+	make
+	sudo sync
+	make ins
+	sudo build/ex
+	make rm
+
+
+
+.PHONY: test
+
