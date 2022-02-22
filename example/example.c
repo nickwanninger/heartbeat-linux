@@ -28,20 +28,24 @@ uint64_t time_us(void) {
 
 
 long interval = 1000;
-void callback(void) { done = 1; }
+void callback(hb_regs_t *regs) {
+	printf("rip: %p\n", regs->rip);
+	done = 1;
+}
 
 void *work(void *v) {
   int core = (off_t)v;
   printf("starting on core %d\n", core);
 
   int res = hb_init(core);
+	char buf[] = "5.666666";
   for (int i = 0; i < 1000; i++) {
     uint64_t start = time_us();
     hb_oneshot(interval, callback);
 
     long iters = 0;
+		float val;
     while (!done) {
-	    // dumb();
       iters++;
     }
 

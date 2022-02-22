@@ -25,17 +25,12 @@ struct hb_thread_info {
 
 static __thread struct hb_thread_info info;
 
-void dumb(void) {
-	int x;
-	ioctl(hbfd, HB_SPIN, &x);
-}
-
-void hb_entry_high() {
+void hb_entry_high(hb_regs_t *regs) {
   if (info.mask) return;
 
 
   info.mask = 1;
-  if (info.callback) info.callback();
+  if (info.callback) info.callback(regs);
   info.mask = 0;
 }
 
@@ -53,7 +48,7 @@ int hb_init(int cpu) {
   if (hbfd <= 0) return -1;
   info.callback = NULL;
   info.interval = 0;
-  info.callback = _hb_entry;
+  info.callback = NULL;
   info.mask = 0;
   return 0;
 }

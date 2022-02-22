@@ -3,7 +3,6 @@
 .global _hb_entry
 _hb_entry:
 
-
 	pushf
   pushq %r15
   pushq %r14
@@ -20,6 +19,8 @@ _hb_entry:
   pushq %rsi
   pushq %rdi
   pushq %rax
+
+	movq %rsp, %rdi
 
 	# call into the high half after we save the state
 	call hb_entry_high
