@@ -27,28 +27,23 @@ uint64_t time_us(void) {
 
 
 
-long interval = 1000;
-void callback(hb_regs_t *regs) {
-	printf("rip: %p\n", regs->rip);
-	done = 1;
-}
+long interval = 3;
+void callback(hb_regs_t *regs) { done = 1; }
 
 void *work(void *v) {
   int core = (off_t)v;
-  printf("starting on core %d\n", core);
+  // printf("starting on core %d\n", core);
 
   int res = hb_init(core);
-	char buf[] = "5.666666";
-  for (int i = 0; i < 1000; i++) {
+  for (int i = 0; 1; i++) {
     uint64_t start = time_us();
     hb_oneshot(interval, callback);
 
     long iters = 0;
-		float val;
+    float val;
     while (!done) {
       iters++;
     }
-
     uint64_t end = time_us();
     printf("%3d: %lu %ld\n", i, end - start, iters);
     done = 0;
@@ -59,22 +54,19 @@ void *work(void *v) {
 }
 
 int main(int argc, char **argv) {
-
-	// work(0);
-
-	// return 0;
-
-  int nproc = 1; // sysconf(_SC_NPROCESSORS_ONLN);
+  int nproc = sysconf(_SC_NPROCESSORS_ONLN) * 2;
   pthread_t threads[nproc];
+
 
   for (off_t i = 0; i < nproc; i++) {
     pthread_create(&threads[i], NULL, work, (void *)i);
   }
 
-
   for (int i = 0; i < nproc; i++) {
     pthread_join(threads[i], NULL);
   }
+
+
 
   return 0;
 }

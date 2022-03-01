@@ -15,89 +15,147 @@
 #include <linux/uaccess.h>
 
 #define INFO(...) printk(KERN_INFO "Heartbeat: " __VA_ARGS__)
+
+// #define HEARTBEAT_DEBUG
+
+#ifdef HEARTBEAT_DEBUG
+#define DEBUG(...) printk(KERN_INFO "[dbg] Heartbeat: " __VA_ARGS__)
+#else
+#define DEBUG(...)
+#endif
 #define DEV_NAME "heartbeat"
 
-#undef INFO
-#define INFO(...)
-static int major;
+static int major = -1;
 static struct class *deviceclass = NULL;
 static struct device *device = NULL;
 
 
+/**
+ * struct hb_priv
+ *
+ * The private state for a hearbeat instance.
+ */
 struct hb_priv {
   struct hrtimer timer;
   struct task_struct *owner;
   off_t return_address;
-	uint64_t interval_us;
-	int repeat;
-	int core;
+  uint64_t interval_us;
+  int repeat;
+  int core;
+  int done;
 };
 
+
+/**
+ * hb_timer_handler
+ *
+ * This function acts as the callback function for the heartbeat timer.
+ * It deliveres heartbeats by directly editing the pt_regs structure of
+ * the 'owner' thread (the thread which initialized the ioctl) to point
+ * to a configured return address.
+ *
+ * We can only safely change the return address iff current == owner,
+ * otherwise we run into race conditions. The only way to solve those
+ * race conditions would be to use IPIs, which would be an enormous
+ * latency hit when targeting ~10us heartbeats.
+ */
 static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
   struct hb_priv *hb;
   struct pt_regs *regs;
+  uint64_t old_sp;
+
+  // Grab the heartbeat private data from the timer itself
   hb = container_of(timer, struct hb_priv, timer);
-
+  // If the thread is being torn down, or the file is being closed,
+  // hb->done will have a 1 written to it. This is intended to abort
+  // any heartbeat ASAP without corrupting the kernel state.
+  if (hb->done) return HRTIMER_NORESTART;
   // If the target thread is not running, schedule it again
-	// at the same interval, hoping it schedules
+  // at the same interval, hoping it schedules
   if (current != hb->owner) {
-    return HRTIMER_RESTART;
+    DEBUG("current was not the owner - repeating\n");
+    goto repeat;
   }
-
+  // Grab the register file using the ptrace interface - this may
+  // seem like a bit of a hack, but it seems safe to use based on
+  // it's usage elsewhere in the kernel for things like bactrace
+  // generation and the likes.
   regs = task_pt_regs(current);
-
-	if (regs == NULL) {
-		printk("huhh!\n");
-	}
-  // printk("pc=%llx, sp=%llx. We need to swap to %llx\n", regs->ip, regs->sp, hb->return_address);
-
-
-	uint64_t old_sp = regs->sp;
-
-  // redzone is bad.
+  // This should not happen, but we ought to handle it just in case :^)
+  if (regs == NULL) {
+    INFO("regs were null\n");
+    goto repeat;
+  }
+  // backup the old stack pointer so we can build a valid stack frame
+  old_sp = regs->sp;
+  // Bypass the x86 redzone
   regs->sp -= 128;
+  // Write the return address
   copy_to_user((void *)regs->sp, &regs->ip, sizeof(regs->ip));
   regs->sp -= 8;
-	// store the old sp on the stack so we can restore to it (redzone is bad.)
+  // store the old sp on the stack so we can restore to it
   copy_to_user((void *)regs->sp, &old_sp, sizeof(regs->ip));
+  // Adjust %rip to point to the return address provided by the ioctl call
   regs->ip = hb->return_address;
+  // if the user configured repeating, schedule it. This is not safe
+  // if the interval leads to reentrant calls to `hb_timer_handler`...
+  // but that is a problem for another day.
+  if (!hb->repeat) {
+    return HRTIMER_NORESTART;
+  }
 
-	if (hb->repeat) {
-		hrtimer_forward_now(timer, ns_to_ktime(hb->interval_us * 1000));
-		return HRTIMER_RESTART;
-	}
-  return HRTIMER_NORESTART;
+repeat:
+  // When repeating, we must forward the timer to a time in the future.
+  // Otherwise the apic or hpet will just interrupt storm the kernel and
+  // lock everything up. Not very fun.
+  hrtimer_forward_now(timer, ns_to_ktime(hb->interval_us * 1000));
+  return HRTIMER_RESTART;
 }
 
 
+/**
+ * hb_cleanup_on_core
+ *
+ * This method is invoked via an ipi request on release to ensure
+ * that the hrtimer is cancelled from the core that created it
+ */
 static void hb_cleanup_on_core(void *arg) {
   struct hb_priv *hb;
-	hb = arg;
-
-	printk("cleanup on core %d\n", hb->core);
+  hb = arg;
+  // Set the `done` flag to one on this core. We don't have to worry
+  // about TSO or atomics here as we are on the core that will read
+  hb->done = 1;
+  DEBUG("cleanup on core %d\n", hb->core);
+  // Cancel the timer. The docs claim this function will wait for any
+  // outstanding ticks to finish, but I don't quite trust that :^)
   hrtimer_cancel(&hb->timer);
+  // And finally, free the hb private structure.
   kfree(hb);
-
-
 }
 
 
 
+
+/**
+ * hb_dev_open
+ *
+ * When `/dev/heartbeat` is opened by a userspace process, this function
+ * is invoked and the private data is allocated and attached to the file
+ * object. This private data mainly contains the `hrtimer` structure which
+ * is the backbone of heartbeat in the Linux kernel
+ */
 static int hb_dev_open(struct inode *inodep, struct file *filep) {
   struct hb_priv *hb;
-
+  // Allocate the private data and ensure that it is zeroed
   hb = filep->private_data = kmalloc(sizeof(struct hb_priv), GFP_KERNEL);
-
-
-  hb->owner = current;
-
   memset(filep->private_data, 0, sizeof(struct hb_priv));
-  INFO("Private data after: %p\n", filep->private_data);
-
-
+  DEBUG("Private data after: %llx\n", filep->private_data);
+  // Configure the owner `task_struct` for this hb_priv.
+  hb->owner = current;
+  // And finally initialize the hrtimer in the private data
+  // with our callback function.
   hrtimer_init(&hb->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
   hb->timer.function = hb_timer_handler;
-
   return 0;
 }
 
@@ -105,60 +163,81 @@ static int hb_dev_release(struct inode *inodep, struct file *filep) {
   struct hb_priv *hb;
 
   hb = filep->private_data;
-  INFO("Closed heartbeat device %p\n", (off_t)filep->private_data);
+  DEBUG("Closed heartbeat device %llx\n", (off_t)filep->private_data);
 
-	// call on the owner core, and don't wait
-	smp_call_function_single(hb->core, hb_cleanup_on_core, hb, true);
 
-	filep->private_data = NULL;
-
+  // call on the owner core, and wait
+  smp_call_function_single(hb->core, hb_cleanup_on_core, hb, 1);
+  filep->private_data = NULL;
   return 0;
 }
 
 static volatile int glob = 0;
 
+
+/**
+ * hb_ioctl
+ *
+ * The main interface for the userspace to configure a heartbeat.
+ */
 static long hb_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
   struct hb_priv *hb;
   int i;
+  uint64_t ns;
+
+  // Grab the private data from the file like in other methods
   hb = file->private_data;
 
-  INFO("%d Heartbeat IOCTL %llx from current=%llx\n", smp_processor_id(), hb, current);
+  DEBUG("%d Heartbeat ioctl %llx from current=%llx\n", smp_processor_id(), hb, current);
 
-  // sanity check.
+  // sanity check heartbeat state.
   if (hb == NULL) return -EINVAL;
 
-  if (cmd == HB_SPIN) {
-  
-	 for (i = 0; i < 10000000; i++) glob += 1;
-	 return 0;
-  }
-
+  // If the user requests a heartbeat to be scheduled...
   if (cmd == HB_SCHEDULE) {
+    // Copy their request configuration into the kernel...
     struct hb_configuration config;
     if (copy_from_user(&config, (struct hb_configuration *)arg, sizeof(struct hb_configuration))) {
       return -EINVAL;
     }
-    uint64_t ns = config.interval * 1000;
-		hb->interval_us = config.interval;
+
+    // Update the `hb` structure with the required info
+    ns = config.interval * 1000;
+    hb->interval_us = config.interval;
     hb->owner = current;
     hb->return_address = config.handler_address;
-		// the core owner of the hrtimer
-		hb->core = smp_processor_id();
-		hb->repeat = config.repeat;
-
-  	hrtimer_forward_now(&hb->timer, ns_to_ktime(ns));
+    hb->core = smp_processor_id();
+    hb->repeat = config.repeat;
+    // and schedule the hrtimer
+    hrtimer_forward_now(&hb->timer, ns_to_ktime(ns));
     hrtimer_start(&hb->timer, ns_to_ktime(ns), HRTIMER_MODE_REL);
     return 0;
   }
+
+  // Invalid command!
   return -EINVAL;
 }
 
+
+/**
+ * The file operations structure for /dev/heartbeat.
+ * We only care about open, ioctl, and release (close)
+ */
 static struct file_operations fops = {
     .open = hb_dev_open,
     .unlocked_ioctl = hb_ioctl,
     .release = hb_dev_release,
 };
 
+
+/**
+ * heartbeat_init
+ *
+ * Initialize the kernel module by creating /dev/heartbeat
+ * and registering various functions. Most of this function
+ * is gross boilerplate. Don't look into it too much or it
+ * might break
+ */
 static int __init heartbeat_init(void) {
   deviceclass = NULL;
   device = NULL;
@@ -168,7 +247,7 @@ static int __init heartbeat_init(void) {
     printk(KERN_ALERT "fast timer failed to register a major number\n");
     return major;
   }
-
+  // Then, create the deviceclass with the right name
   deviceclass = class_create(THIS_MODULE, DEV_NAME);
   if (IS_ERR(deviceclass)) {
     unregister_chrdev(major, DEV_NAME);
@@ -185,18 +264,28 @@ static int __init heartbeat_init(void) {
     return PTR_ERR(device);
   }
 
-  printk(KERN_INFO "started timer_module!\n");
+  INFO("Finished initialization\n");
 
   return 0;
 }
 
+
+/**
+ * heartbeat_exit
+ *
+ * Teardown all the state and driver information for heartbeat
+ */
 static void __exit heartbeat_exit(void) {
-  device_destroy(deviceclass, MKDEV(major, 0));  // remove the device
-  class_unregister(deviceclass);                 // unregister the device class
-  class_destroy(deviceclass);                    // remove the device class
-  unregister_chrdev(major, DEV_NAME);            // unregister the major number
+  if (deviceclass) {
+    device_destroy(deviceclass, MKDEV(major, 0));  // remove the device
+    class_unregister(deviceclass);                 // unregister the device class
+    class_destroy(deviceclass);                    // remove the device class
+  }
+  unregister_chrdev(major, DEV_NAME);  // unregister the major number
   return;
 }
+
+
 
 module_init(heartbeat_init);
 module_exit(heartbeat_exit);

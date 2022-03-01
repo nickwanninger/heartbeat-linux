@@ -1,6 +1,6 @@
 # Linux Kernel Heartbeat Scheduler
 
-
+Delivering timer "interrupts" to userspace in the least hygienic way.
 
 ## Building
 This project is comprised of two parts: a kernel module to allow low latency heartbeats
