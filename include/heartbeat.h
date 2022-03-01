@@ -7,6 +7,10 @@
 #include "heartbeat_kmod.h"
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 
 /**
  * When a heartbeat is delivered, these registers are saved on the stack
@@ -79,3 +83,7 @@ int hb_repeat(uint64_t us, hb_callback_t callback);
  * there was not one scheduled.
  */
 int hb_cancel(void);
+
+#ifdef __cplusplus
+}
+#endif
