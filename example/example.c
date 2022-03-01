@@ -35,7 +35,7 @@ void *work(void *v) {
   // printf("starting on core %d\n", core);
 
   int res = hb_init(core);
-  for (int i = 0; i < 10000; i++) {
+  for (int i = 0; 1; i++) {
     uint64_t start = time_us();
     hb_oneshot(interval, callback);
 
@@ -54,7 +54,7 @@ void *work(void *v) {
 }
 
 int main(int argc, char **argv) {
-  int nproc = sysconf(_SC_NPROCESSORS_ONLN);
+  int nproc = sysconf(_SC_NPROCESSORS_ONLN) * 2;
   pthread_t threads[nproc];
 
 
