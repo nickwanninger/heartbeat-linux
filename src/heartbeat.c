@@ -34,6 +34,16 @@ void hb_entry_high(hb_regs_t *regs) {
 
 
 
+void hb_set_rollforwards(struct hb_rollforward *rfs, unsigned count) {
+	// printf("set rollforwards!\n");
+	struct hb_set_rollforwards_arg arg;
+	arg.rfs = rfs;
+	arg.count = count;
+  ioctl(hbfd, HB_SET_ROLLFORWARDS, &arg);
+}
+
+
+
 int hb_init(int cpu) {
   cpu_set_t my_set;                                 /* Define your cpu_set bit mask. */
   CPU_ZERO(&my_set);                                /* Initialize it all to 0, i.e. no CPUs selected. */

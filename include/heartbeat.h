@@ -38,6 +38,8 @@ typedef struct {
 
 
 
+void hb_set_rollforwards(struct hb_rollforward *rfs, unsigned count);
+
 /**
  * hb_callback_t
  * The type of functions which can be called by heartbeat

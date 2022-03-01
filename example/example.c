@@ -27,23 +27,27 @@ uint64_t time_us(void) {
 
 
 
-long interval = 3;
+long interval = 100;
 void callback(hb_regs_t *regs) { done = 1; }
+
+extern long hb_test(void);
+extern void hb_test_target(void);
+extern void hb_test_target_rf(void);
+
 
 void *work(void *v) {
   int core = (off_t)v;
-  // printf("starting on core %d\n", core);
-
+  printf("starting on core %d\n", core);
   int res = hb_init(core);
+
+  struct hb_rollforward rf;
+  rf.from = hb_test_target;
+  rf.to = hb_test_target_rf;
+  hb_set_rollforwards(&rf, 1);
+  hb_repeat(interval, NULL);
   for (int i = 0; 1; i++) {
     uint64_t start = time_us();
-    hb_oneshot(interval, callback);
-
-    long iters = 0;
-    float val;
-    while (!done) {
-      iters++;
-    }
+    long iters = hb_test();
     uint64_t end = time_us();
     printf("%3d: %lu %ld\n", i, end - start, iters);
     done = 0;
@@ -54,9 +58,8 @@ void *work(void *v) {
 }
 
 int main(int argc, char **argv) {
-  int nproc = sysconf(_SC_NPROCESSORS_ONLN) * 2;
+  int nproc = sysconf(_SC_NPROCESSORS_ONLN);
   pthread_t threads[nproc];
-
 
   for (off_t i = 0; i < nproc; i++) {
     pthread_create(&threads[i], NULL, work, (void *)i);

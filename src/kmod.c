@@ -43,6 +43,9 @@ struct hb_priv {
   int repeat;
   int core;
   int done;
+
+  unsigned nrfs;
+  struct hb_rollforward *rfs;
 };
 
 
@@ -63,6 +66,7 @@ static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
   struct hb_priv *hb;
   struct pt_regs *regs;
   uint64_t old_sp;
+  int i;
 
   // Grab the heartbeat private data from the timer itself
   hb = container_of(timer, struct hb_priv, timer);
@@ -81,6 +85,28 @@ static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
   // it's usage elsewhere in the kernel for things like bactrace
   // generation and the likes.
   regs = task_pt_regs(current);
+
+
+
+  // INFO("ra: %llx\n", hb->return_address);
+  if (hb->nrfs != 0) {
+    if (hb->rfs) {
+      for (i = 0; i < hb->nrfs; i++) {
+        if (hb->rfs[i].from == regs->ip) {
+          regs->ip = hb->rfs[i].to;
+          if (!hb->repeat) {
+            return HRTIMER_NORESTART;
+          }
+          break;
+        }
+      }
+    }
+    goto repeat;
+  }
+
+
+
+
   // This should not happen, but we ought to handle it just in case :^)
   if (regs == NULL) {
     INFO("regs were null\n");
@@ -152,6 +178,9 @@ static int hb_dev_open(struct inode *inodep, struct file *filep) {
   DEBUG("Private data after: %llx\n", filep->private_data);
   // Configure the owner `task_struct` for this hb_priv.
   hb->owner = current;
+  hb->rfs = NULL;
+  hb->nrfs = 0;
+  hb->return_address = NULL;
   // And finally initialize the hrtimer in the private data
   // with our callback function.
   hrtimer_init(&hb->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
@@ -211,6 +240,25 @@ static long hb_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
     // and schedule the hrtimer
     hrtimer_forward_now(&hb->timer, ns_to_ktime(ns));
     hrtimer_start(&hb->timer, ns_to_ktime(ns), HRTIMER_MODE_REL);
+    return 0;
+  }
+
+  if (cmd == HB_SET_ROLLFORWARDS) {
+    struct hb_set_rollforwards_arg rfarg;
+
+    // hmm... should this be allowed?
+    if (hb->rfs != NULL) return -EEXIST;
+    if (copy_from_user(&rfarg, (struct hb_set_rollforwards_arg *)arg, sizeof(struct hb_set_rollforwards_arg))) {
+      return -EINVAL;
+    }
+
+    // INFO("SET ROLLFORWARDS\n");
+    hb->rfs = kmalloc(sizeof(struct hb_rollforward) * rfarg.count, GFP_KERNEL);
+    hb->nrfs = rfarg.count;
+
+    if (copy_from_user(hb->rfs, rfarg.rfs, sizeof(struct hb_rollforward) * rfarg.count)) {
+      return -EINVAL;
+    }
     return 0;
   }
 

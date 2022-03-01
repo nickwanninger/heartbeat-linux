@@ -47,3 +47,16 @@ _hb_entry:
 	# %rsp is now the interrupted context's rsp, so we cannot use
 	# `ret` to go back to the old contex
 	jmp *-128(%rsp)
+
+.global hb_test
+.global hb_test_target
+.global hb_test_target_rf
+hb_test:
+	movq $0, %rax
+.loop:
+	inc %rax
+hb_test_target:
+	jmp .loop
+
+hb_test_target_rf:
+	ret
