@@ -45,7 +45,7 @@ void *work(void *v) {
       iters++;
     }
     uint64_t end = time_us();
-    // printf("%3d: %lu %ld\n", i, end - start, iters);
+    printf("%3d: %lu %ld\n", i, end - start, iters);
     done = 0;
   }
   hb_exit();

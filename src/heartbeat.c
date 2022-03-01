@@ -27,8 +27,6 @@ static __thread struct hb_thread_info info;
 
 void hb_entry_high(hb_regs_t *regs) {
   if (info.mask) return;
-
-
   info.mask = 1;
   if (info.callback) info.callback(regs);
   info.mask = 0;
