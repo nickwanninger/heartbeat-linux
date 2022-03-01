@@ -4,7 +4,7 @@ heartbeat-objs := src/kmod.o
 EXTRA_CFLAGS:=-I$(PWD)/include
 MOD=heartbeat.ko
 
-default: build/ex
+default: build/ex build/libhb.so
 
 clean:
 	rm -rf build
@@ -21,6 +21,11 @@ build/ex:  example/example.c src/heartbeat.c src/entry.S
 	@mkdir -p build
 	gcc -pthread -o $@ -Iinclude $^
 
+
+install:
+	@install -m 755 build/libhb.so /usr/local/lib/libhb.so
+	@install -m 644 include/heartbeat.h /usr/local/include/heartbeat.h
+	@install -m 644 include/heartbeat_kmod.h /usr/local/include/heartbeat_kmod.h
 
 # run `make kmod` to build the kernel module
 kmod: $(MOD)
@@ -48,5 +53,4 @@ test:
 
 
 
-.PHONY: test
-
+.PHONY: test install
