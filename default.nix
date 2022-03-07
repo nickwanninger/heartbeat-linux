@@ -19,6 +19,8 @@ stdenv.mkDerivation rec {
     mkdir -p $out
     cp build/libhb.so $out
     cp build/ex $out
+    mkdir -p $out/include
+    cp include/*.h $out/include
   '';
 
   meta = {
