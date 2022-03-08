@@ -106,7 +106,7 @@ static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
 				while (i <= j) {
 					k = i+((j-i)/2);
         	if (hb->rfs[k].from == src) {
-						regs->ip = hb->rfs[i].to;
+						regs->ip = hb->rfs[k].to;
 						if (!hb->repeat) {
 							return HRTIMER_NORESTART;
 						}
