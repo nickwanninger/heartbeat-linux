@@ -1,5 +1,7 @@
 obj-m += heartbeat.o
 
+INSTALL_MOD_PATH?=/usr/local/
+
 heartbeat-objs := src/kmod.o
 EXTRA_CFLAGS:=-I$(PWD)/include
 MOD=heartbeat.ko
@@ -23,9 +25,9 @@ build/ex:  example/example.c src/heartbeat.c src/entry.S
 
 
 install:
-	@install -m 755 build/libhb.so /usr/local/lib/libhb.so
-	@install -m 644 include/heartbeat.h /usr/local/include/heartbeat.h
-	@install -m 644 include/heartbeat_kmod.h /usr/local/include/heartbeat_kmod.h
+	@install -m 755 build/libhb.so $(INSTALL_MOD_PATH)/lib/libhb.so
+	@install -m 644 include/heartbeat.h $(INSTALL_MOD_PATH)/include/heartbeat.h
+	@install -m 644 include/heartbeat_kmod.h $(INSTALL_MOD_PATH)/include/heartbeat_kmod.h
 
 # run `make kmod` to build the kernel module
 kmod: $(MOD)
