@@ -46,6 +46,8 @@ struct hb_priv {
 
   unsigned nrfs;
   struct hb_rollforward *rfs;
+
+	unsigned long heartbeat_count;
 };
 
 
@@ -80,6 +82,8 @@ static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
     DEBUG("current was not the owner - repeating\n");
     goto repeat;
   }
+
+	hb->heartbeat_count++;
   // Grab the register file using the ptrace interface - this may
   // seem like a bit of a hack, but it seems safe to use based on
   // it's usage elsewhere in the kernel for things like bactrace
@@ -200,6 +204,7 @@ static int hb_dev_open(struct inode *inodep, struct file *filep) {
   hb->rfs = NULL;
   hb->nrfs = 0;
   hb->return_address = NULL;
+  hb->heartbeat_count = 0;
   // And finally initialize the hrtimer in the private data
   // with our callback function.
   hrtimer_init(&hb->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
@@ -211,7 +216,7 @@ static int hb_dev_release(struct inode *inodep, struct file *filep) {
   struct hb_priv *hb;
 
   hb = filep->private_data;
-  DEBUG("Closed heartbeat device %llx\n", (off_t)filep->private_data);
+  INFO("Closed heartbeat device %llx with %lu heartbeats\n", (off_t)filep->private_data, hb->heartbeat_count);
 
 
   // call on the owner core, and wait
