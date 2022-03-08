@@ -91,15 +91,34 @@ static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
   // INFO("ra: %llx\n", hb->return_address);
   if (hb->nrfs != 0) {
     if (hb->rfs) {
-      for (i = 0; i < hb->nrfs; i++) {
-        if (hb->rfs[i].from == regs->ip) {
-          regs->ip = hb->rfs[i].to;
-          if (!hb->repeat) {
-            return HRTIMER_NORESTART;
-          }
-          break;
-        }
-      }
+			size_t n;
+			off_t src;
+			int64_t k, not_found;
+
+		 	n = hb->nrfs;
+			src = regs->ip;
+			not_found = -1;
+
+			// Binary search over the rollforwards
+			{
+				int64_t i = 0, j = (int64_t)n - 1;
+
+				while (i <= j) {
+					k = i+((j-i)/2);
+        	if (hb->rfs[k].from == src) {
+						regs->ip = hb->rfs[i].to;
+						if (!hb->repeat) {
+							return HRTIMER_NORESTART;
+						}
+						break;
+					} else if (hb->rfs[k].from < src) {
+						i = k + 1;
+					} else {
+						j = k - 1;
+					}
+				}
+				k = not_found;
+			}
     }
     goto repeat;
   }
