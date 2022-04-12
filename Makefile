@@ -16,12 +16,12 @@ clean:
 
 build/libhb.so: src/heartbeat.c src/entry.S
 	@mkdir -p build
-	gcc -Iinclude -shared -o $@ -fPIC $^
+	gcc -g -Iinclude -shared -o $@ -fPIC $^
 
 
 build/ex:  example/example.c src/heartbeat.c src/entry.S
 	@mkdir -p build
-	gcc -pthread -o $@ -Iinclude $^
+	gcc -g -pthread -o $@ -Iinclude $^
 
 
 install:
