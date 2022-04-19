@@ -13,7 +13,7 @@
 __thread volatile uint64_t nb_iters = 0;
 volatile int done = 0;
 int nproc = 0;
-pthread_t* threads;
+pthread_t *threads;
 
 unsigned long hb_cycles(void) {
   uint32_t lo, hi;
@@ -35,8 +35,7 @@ uint64_t time_us(void) {
 long interval = 100;
 void callback(hb_regs_t *regs) { done = 1; }
 
-static
-cpu_set_t cpuset;
+static cpu_set_t cpuset;
 
 uint64_t per_worker_iters[128];
 
@@ -46,9 +45,9 @@ extern void hb_test_target_rf(void);
 
 volatile int live_threads = 0;
 
-void ping_handler(int sig, siginfo_t *si,  void *priv) {
-  mcontext_t* mctx = &((ucontext_t *)priv)->uc_mcontext;
-  void** rip = &mctx->gregs[16];
+void ping_handler(int sig, siginfo_t *si, void *priv) {
+  mcontext_t *mctx = &((ucontext_t *)priv)->uc_mcontext;
+  void **rip = &mctx->gregs[16];
   if (*rip == hb_test_target) {
     *rip = hb_test_target_rf;
   }
@@ -60,7 +59,7 @@ void work(int i) {
     nb_iters += hb_test();
   }
   __sync_fetch_and_add(&live_threads, -1);
-  //printf("done\n");
+  // printf("done\n");
   per_worker_iters[i] = nb_iters;
 }
 
@@ -69,14 +68,7 @@ void *work_hbtimer(void *v) {
   if (core == 0) {
     return NULL;
   }
-  //printf("starting on core %d\n", core);
-  int res = hb_init(core);
 
-  struct hb_rollforward rf;
-  rf.from = hb_test_target;
-  rf.to = hb_test_target_rf;
-  hb_set_rollforwards(&rf, 1);
-  hb_repeat(interval, NULL);
   work(core);
   hb_exit();
 
@@ -87,7 +79,7 @@ pthread_barrier_t ping_thread_barrier;
 
 void *work_ping_thread(void *v) {
   int core = (off_t)v;
-  pthread_t  thread = pthread_self();
+  pthread_t thread = pthread_self();
   {
     sigset_t mask, prev_mask;
     if (pthread_sigmask(SIG_SETMASK, NULL, &prev_mask)) {
@@ -127,19 +119,18 @@ void *work_ping_thread(void *v) {
 
     while (!done || (live_threads != 0)) {
       for (int i = 0; i < nproc; i++) {
-	unsigned long long missed;
-	int ret = read(timerfd, &missed, sizeof(missed));
-	if (ret == -1) {
-	  exit(1);
-	}
-	pthread_kill(threads[i], SIGUSR1);
+        unsigned long long missed;
+        int ret = read(timerfd, &missed, sizeof(missed));
+        if (ret == -1) {
+          exit(1);
+        }
+        pthread_kill(threads[i], SIGUSR1);
       }
     }
     return NULL;
   }
   //  printf("starting on core %d\n", core);
-  if (s != 0)
-    printf("error\n");
+  if (s != 0) printf("error\n");
 
   work(core);
 
@@ -161,40 +152,69 @@ void ping_thread_main(int nproc) {
   for (int j = 0; j < nproc; j++) {
     CPU_SET(j, &cpuset);
   }
-  
+
   for (off_t i = 0; i < nproc; i++) {
     pthread_create(&threads[i], NULL, work_ping_thread, (void *)i);
   }
-  
+
   for (int i = 0; i < nproc; i++) {
     pthread_join(threads[i], NULL);
   }
-  
 }
 
-void handler() {
-  done = 1;
+void handler() { done = 1; }
+
+
+static int simple(void) {
+  hb_init();
+  struct hb_rollforward rf;
+  rf.from = hb_test_target;
+  rf.to = hb_test_target_rf;
+  hb_set_rollforwards(&rf, 1);
+  hb_repeat(interval, NULL);
+
+  while (1) {
+    unsigned long long nb_iters = 0;
+    // __sync_fetch_and_add(&live_threads, 1);
+    nb_iters += hb_test();
+    printf("iters: %lu\n", nb_iters);
+    // __sync_fetch_and_add(&live_threads, -1);
+  }
+  hb_exit();
+  // printf("hbtimer\n");
 }
 
 int main(int argc, char **argv) {
+  interval = atoi(argv[2]);
+
+  if (argv[1][0] == 's') {
+    return simple();
+  }
+
   nproc = sysconf(_SC_NPROCESSORS_ONLN);
   pthread_barrier_init(&ping_thread_barrier, NULL, nproc);
-  threads = (pthread_t*)malloc(sizeof(pthread_t) * nproc);
+  threads = (pthread_t *)malloc(sizeof(pthread_t) * nproc);
   for (int i = 0; i < 128; i++) {
     per_worker_iters[i] = 0;
   }
   // start alarm
   signal(SIGALRM, handler);
-  signal(SIGINT, handler);
-  alarm(2);
-  interval = atoi(argv[2]);
+  // signal(SIGINT, handler);
+  alarm(1);
   int hbtimer = argv[1][0] == 'h';
-  printf("interval %lu\n", interval);
+  // printf("interval %lu\n", interval);
   if (hbtimer) {
-    printf("hbtimer\n");
+    hb_init();
+    struct hb_rollforward rf;
+    rf.from = hb_test_target;
+    rf.to = hb_test_target_rf;
+    hb_set_rollforwards(&rf, 1);
+    hb_repeat(interval, NULL);
+    // printf("hbtimer\n");
     hbtimer_main(nproc);
+    hb_exit();
   } else {
-    printf("ping\n");
+    // printf("ping\n");
     ping_thread_main(nproc);
   }
   uint64_t all_iters = 0;
@@ -202,7 +222,8 @@ int main(int argc, char **argv) {
     all_iters += per_worker_iters[i];
   }
   free(threads);
-  printf("iters %lu\n", all_iters);
-  printf("iters_per_proc %lu\n", all_iters/nproc);
+  printf("%s, %lu, %lu, %lu\n", hbtimer ? "hbtimer" : "   ping", interval, all_iters / nproc, all_iters);
+  // printf("iters %lu\n", all_iters);
+  // printf("iters_per_proc %lu\n", all_iters/nproc);
   return 0;
 }

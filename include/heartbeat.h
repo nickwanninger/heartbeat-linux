@@ -47,22 +47,14 @@ void hb_set_rollforwards(struct hb_rollforward *rfs, unsigned count);
 typedef void (*hb_callback_t)(hb_regs_t *);
 
 
-/**
- * hb_init
- *
- * Initialize heartbeat for this thread. There exists an invariant that
- * the thread must be locked to a certain CPU core because hrtimer only
- * delivers to the core it is created on. Also, we want to avoid all
- * kinds of IPI and signals because they have been shown to be slow.
- */
-int hb_init(int cpu);
+int hb_init(void);
 
 /**
  * hb_exit
  *
  * Exit the heartbeat timer, destroying the timer in the kernel
  */
-void hb_exit();
+void hb_exit(void);
 
 /**
  * hb_oneshot

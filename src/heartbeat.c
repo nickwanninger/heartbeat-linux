@@ -44,12 +44,14 @@ void hb_set_rollforwards(struct hb_rollforward *rfs, unsigned count) {
 
 
 
-int hb_init(int cpu) {
+int hb_init() {
+#if 0
   cpu_set_t my_set;                                 /* Define your cpu_set bit mask. */
   CPU_ZERO(&my_set);                                /* Initialize it all to 0, i.e. no CPUs selected. */
   CPU_SET(cpu, &my_set);                            /* set the bit that represents core 7. */
   sched_setaffinity(0, sizeof(cpu_set_t), &my_set); /* Set affinity of tihs process to */
   sched_yield();
+#endif
 
   if (hbfd != 0) return -EEXIST;
   hbfd = open("/dev/heartbeat", O_RDWR);

@@ -47,9 +47,59 @@ struct hb_priv {
   unsigned nrfs;
   struct hb_rollforward *rfs;
 
-	unsigned long heartbeat_count;
+  unsigned long heartbeat_count;
 };
 
+
+static void hb_timer_dispatch(void *arg) {
+  struct hb_priv *hb;
+  struct pt_regs *regs;
+  hb = arg;
+
+
+  if (current == NULL) return;
+  if (current->tgid != hb->owner->tgid) return;
+
+  // Grab the register file using the ptrace interface - this may
+  // seem like a bit of a hack, but it seems safe to use based on
+  // it's usage elsewhere in the kernel for things like bactrace
+  // generation and the likes.
+  regs = task_pt_regs(current);
+
+
+  if (hb->nrfs != 0) {
+    if (hb->rfs) {
+      size_t n;
+      off_t src;
+      int64_t k, not_found;
+
+      n = hb->nrfs;
+      src = regs->ip;
+      not_found = -1;
+
+      // Binary search over the rollforwards
+      {
+        int64_t i = 0, j = (int64_t)n - 1;
+
+        while (i <= j) {
+          k = i + ((j - i) / 2);
+          if (hb->rfs[k].from == src) {
+            regs->ip = hb->rfs[k].to;
+            if (!hb->repeat) {
+              return;
+            }
+            break;
+          } else if (hb->rfs[k].from < src) {
+            i = k + 1;
+          } else {
+            j = k - 1;
+          }
+        }
+        k = not_found;
+      }
+    }
+  }
+}
 
 /**
  * hb_timer_handler
@@ -70,90 +120,25 @@ static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
   uint64_t old_sp;
   int i;
 
+
   // Grab the heartbeat private data from the timer itself
   hb = container_of(timer, struct hb_priv, timer);
   // If the thread is being torn down, or the file is being closed,
   // hb->done will have a 1 written to it. This is intended to abort
   // any heartbeat ASAP without corrupting the kernel state.
-  if (hb->done) return HRTIMER_NORESTART;
-  // If the target thread is not running, schedule it again
-  // at the same interval, hoping it schedules
-  if (current != hb->owner) {
-    DEBUG("current was not the owner - repeating\n");
-    goto repeat;
-  }
-
-	hb->heartbeat_count++;
-  // Grab the register file using the ptrace interface - this may
-  // seem like a bit of a hack, but it seems safe to use based on
-  // it's usage elsewhere in the kernel for things like bactrace
-  // generation and the likes.
-  regs = task_pt_regs(current);
-
-
-
-  // INFO("ra: %llx\n", hb->return_address);
-  if (hb->nrfs != 0) {
-    if (hb->rfs) {
-			size_t n;
-			off_t src;
-			int64_t k, not_found;
-
-		 	n = hb->nrfs;
-			src = regs->ip;
-			not_found = -1;
-
-			// Binary search over the rollforwards
-			{
-				int64_t i = 0, j = (int64_t)n - 1;
-
-				while (i <= j) {
-					k = i+((j-i)/2);
-        	if (hb->rfs[k].from == src) {
-						regs->ip = hb->rfs[k].to;
-						if (!hb->repeat) {
-							return HRTIMER_NORESTART;
-						}
-						break;
-					} else if (hb->rfs[k].from < src) {
-						i = k + 1;
-					} else {
-						j = k - 1;
-					}
-				}
-				k = not_found;
-			}
-    }
-    goto repeat;
-  }
-
-
-
-
-  // This should not happen, but we ought to handle it just in case :^)
-  if (regs == NULL) {
-    INFO("regs were null\n");
-    goto repeat;
-  }
-  // backup the old stack pointer so we can build a valid stack frame
-  old_sp = regs->sp;
-  // Bypass the x86 redzone
-  regs->sp -= 128;
-  // Write the return address
-  copy_to_user((void *)regs->sp, &regs->ip, sizeof(regs->ip));
-  regs->sp -= 8;
-  // store the old sp on the stack so we can restore to it
-  copy_to_user((void *)regs->sp, &old_sp, sizeof(regs->ip));
-  // Adjust %rip to point to the return address provided by the ioctl call
-  regs->ip = hb->return_address;
-  // if the user configured repeating, schedule it. This is not safe
-  // if the interval leads to reentrant calls to `hb_timer_handler`...
-  // but that is a problem for another day.
-  if (!hb->repeat) {
+  if (hb->done) {
+    INFO("done\n");
     return HRTIMER_NORESTART;
   }
 
-repeat:
+  hb->heartbeat_count++;
+
+	// dispatch the heartbeat to the other cores
+  on_each_cpu(hb_timer_dispatch, (void *)hb, 1);
+
+  if (!hb->repeat) {
+    return HRTIMER_NORESTART;
+  }
   // When repeating, we must forward the timer to a time in the future.
   // Otherwise the apic or hpet will just interrupt storm the kernel and
   // lock everything up. Not very fun.
