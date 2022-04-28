@@ -21,9 +21,6 @@ unsigned long hb_cycles(void) {
   return lo | ((uint64_t)(hi) << 32);
 }
 
-extern void dumb(void);
-
-
 uint64_t time_us(void) {
   struct timeval tv;
   gettimeofday(&tv, NULL);
