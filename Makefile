@@ -23,6 +23,9 @@ build/ex:  example/example.c src/heartbeat.c src/entry.S
 	@mkdir -p build
 	gcc -g -pthread -o $@ -Iinclude $^
 
+build/sum_array:  rf_compiler/sum_array.c src/heartbeat.c src/entry.S
+	@mkdir -p build
+	gcc -g -pthread -o $@ -Iinclude $^
 
 install:
 	@install -m 755 build/libhb.so $(INSTALL_MOD_PATH)/lib/libhb.so
@@ -42,7 +45,7 @@ $(MOD): src/kmod.c
 # insert the module into the kernel
 ins: $(MOD)
 	sudo insmod $(MOD)
-	sudo chmod +rw /dev/heartbeat
+	sudo chmod 0777 /dev/heartbeat
 
 # remove the module from the kernel
 rm:

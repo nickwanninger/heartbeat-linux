@@ -33,7 +33,7 @@ microseconds (±~1us), the function `cb` will be called. You must schedule anoth
 afterwards when using this interface.
 
 `hb_repeat(us, cb)` works in a similar way, but you do not need to call `hb_oneshot` after
-`cb` is called, resulting in almost no overhead. Note, however, than extremely low intervals
+`cb` is called, resulting in almost no overhead. Note, however, that extremely low intervals
 using `repeat` results in missed interrupts, as a heartbeat may occur during your callback,
 and reentrancy is not supported.
 

@@ -21,7 +21,7 @@ for line in lines:
 
 # The handlers to look for
 handlers = [
-    'square'
+    'sahandler'
 ]
 
 handler_call_matches = list(map(lambda a: re.compile(f'callq\s+{a}'), handlers))

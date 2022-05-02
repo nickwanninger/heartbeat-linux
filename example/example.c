@@ -30,7 +30,6 @@ uint64_t time_us(void) {
 
 
 long interval = 100;
-void callback(hb_regs_t *regs) { done = 1; }
 
 static cpu_set_t cpuset;
 
