@@ -40,11 +40,20 @@ int __attribute__((preserve_all, noinline)) sahandler(int x) {
   my_nb_handler_calls++;
   void* ra_dst = __builtin_return_address(0);
   void* ra_src = NULL;
-  for (uint64_t i = 0; i < rollforward_table_size; i++) {
-    void* ra = rollback_table[i].from;
-    if ((uint64_t)ra == (uint64_t)ra_dst) {
-      ra_src = ra;
-      break;
+  // Binary search over the rollforwards
+  {
+    int64_t i = 0, j = (int64_t)rollforward_table_size - 1;
+    int64_t k;
+    while (i <= j) {
+      k = i + ((j - i) / 2);
+      if ((uint64_t)rollback_table[k].from == (uint64_t)ra_dst) {
+	ra_src = rollback_table[k].to;
+	break;
+      } else if ((uint64_t)rollback_table[k].from < (uint64_t)ra_dst) {
+	i = k + 1;
+      } else {
+	j = k - 1;
+      }
     }
   }
   if (ra_src != NULL) {
