@@ -50,8 +50,9 @@ def emit_dst_line(line):
     for lbl in local_labels:
         srcline = srcline.replace(lbl, f'{lbl}_RF')
     srcline = re.sub(globalsymbol_regex, '# removed', srcline)
+    # WARNING: I've hardcoded the handler name below, because I don't know how to extract the handler name from the regexp; to fix, we need to find the corresponding entry in the handlers array -- Mike
     for h in handler_call_matches:
-        srcline = re.sub(h, '# removed call', srcline)
+        srcline = re.sub(h, 'callq sahandler@PLT # replaced call', srcline)
     out.write(srcline)
 
 
