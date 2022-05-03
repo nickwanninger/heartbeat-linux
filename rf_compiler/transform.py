@@ -19,12 +19,8 @@ for line in lines:
     for match in matches:
         local_labels.append(match[:-1])
 
-# The handlers to look for
-handlers = [
-    'sahandler'
-]
+call_re = re.compile('callq\s+__rf_handle_(\w+)')
 
-handler_call_matches = list(map(lambda a: re.compile(f'callq\s+{a}'), handlers))
 
 def should_emit_rf_label(line):
     if line.lstrip().startswith('.'):
@@ -39,8 +35,9 @@ def emit_src_line(line):
     if should_emit_rf_label(line):
         out.write(f'__RF_SRC_{i}:')
     srcline = line
-    for h in handler_call_matches:
-        srcline = re.sub(h, '# removed handler call', srcline)
+    m = re.search(call_re, srcline)
+    if m is not None:
+        srcline = f'# removed handler call: {srcline}'
     out.write(srcline)
 
 def emit_dst_line(line):
@@ -50,9 +47,14 @@ def emit_dst_line(line):
     for lbl in local_labels:
         srcline = srcline.replace(lbl, f'{lbl}_RF')
     srcline = re.sub(globalsymbol_regex, '# removed', srcline)
-    # WARNING: I've hardcoded the handler name below, because I don't know how to extract the handler name from the regexp; to fix, we need to find the corresponding entry in the handlers array -- Mike
-    for h in handler_call_matches:
-        srcline = re.sub(h, 'callq sahandler@PLT # replaced call', srcline)
+
+    m = re.search(call_re, srcline)
+    # replace calls to functions that look like __rf_handle_*
+    if m is not None:
+        print(srcline)
+        print(m)
+        print(m.groups()[0])
+        srcline = srcline.replace(m.groups()[0], m.groups()[0] + '_in_rf')
     out.write(srcline)
 
 

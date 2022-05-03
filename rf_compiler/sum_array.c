@@ -36,7 +36,7 @@ uint64_t cycles(void) {
 __thread volatile
 uint64_t my_nb_handler_calls = 0;
 
-int __attribute__((preserve_all, noinline)) sahandler(int x) {
+int __attribute__((preserve_all, noinline)) __rf_handle_sumarray(int x) {
   my_nb_handler_calls++;
   void* ra_dst = __builtin_return_address(0);
   void* ra_src = NULL;
@@ -79,7 +79,7 @@ void* sum_array(void* v) {
   while (! done) {
     uint64_t* a = &array[proc * array_block_len];
     for (uint64_t i = 0; i < array_block_len; i++) {
-      sahandler(proc);
+      __rf_handle_sumarray(proc);
       s += a[i];
     }
   }
