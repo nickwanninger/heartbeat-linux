@@ -27,7 +27,7 @@ pushd root
 	pwd
 	find . -print0 \
 		| cpio --quiet --null -ov --format=newc \
-		| gzip --quiet -9 > $WORKSPACE/build/initramfs-busybox-x86.cpio.gz
+		| gzip --quiet -9 > $WORKSPACE/initramfs.cpio.gz
 popd
 
 
@@ -35,5 +35,5 @@ make CC=$CC -C linux -j$(nproc)
 
 qemu-system-x86_64 -m 8G                                 \
 	-kernel $WORKSPACE/linux/arch/x86_64/boot/bzImage      \
-	-initrd $WORKSPACE/build/initramfs-busybox-x86.cpio.gz \
+	-initrd $WORKSPACE/initramfs.cpio.gz \
 	-nographic -append "console=ttyS0 init=/init"

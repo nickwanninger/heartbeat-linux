@@ -2,3 +2,4 @@ linux
 
 build
 busybox-1.32.0
+initramfs-busybox-x86.cpio.gz
