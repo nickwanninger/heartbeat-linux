@@ -1,2 +1,4 @@
 linux
 initramfs.cpio.gz
+
+/build
