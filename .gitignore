@@ -2,3 +2,17 @@ linux
 initramfs.cpio.gz
 
 /build
+
+.Module.symvers.cmd
+.mod.ko.cmd
+.mod.mod.cmd
+.mod.mod.o.cmd
+.mod.o.cmd
+.modules.order.cmd
+Module.symvers
+mod.ko
+mod.mod
+mod.mod.c
+mod.mod.o
+mod.o
+modules.order

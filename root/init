@@ -5,5 +5,7 @@ mount -t sysfs none /sys
 mount -t devfs none /dev
 
 cat /etc/motd
+echo "inserting the kernel module:"
+insmod /etc/modules/mod.ko
 
 exec /bin/sh
