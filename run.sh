@@ -1,19 +1,21 @@
 #!/bin/bash
 
-set -x
 set -e
 
 WORKSPACE=$(pwd)
 
 BUSYBOX_VERSION=1.32.0
-CC=clang
+CC=${CC:=clang}
+
+echo "Compiling with $CC"
+
 
 if [ ! -d "linux" ]
 then
 	git clone git@github.com:torvalds/linux.git --depth 1 linux
 
 	pushd linux >/dev/null
-		make CC=clang defconfig
+		make CC=$CC defconfig
 	popd
 fi
 
