@@ -17,6 +17,9 @@ then
 	popd
 fi
 
+# git doesn't like empty files...
+mkdir -p root/{bin,sbin,etc,proc,sys,usr/{bin,sbin}}
+
 
 
 
