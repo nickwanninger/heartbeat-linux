@@ -54,7 +54,7 @@ def emit_dst_line(line):
         print(srcline)
         print(m)
         print(m.groups()[0])
-        srcline = srcline.replace(m.groups()[0], m.groups()[0] + '_in_rf')
+        srcline = srcline.replace(m.groups()[0], m.groups()[0]) # + '_in_rf')
     out.write(srcline)
 
 

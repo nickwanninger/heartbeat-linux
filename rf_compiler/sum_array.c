@@ -89,10 +89,12 @@ void* sum_array(void* v) {
 }
 
 int main(int argc, char **argv) {
-  printf("there are %lu rollforward entries\n", rollforward_table_size);
-
-  nproc = sysconf(_SC_NPROCESSORS_ONLN)/2;
+  //printf("there are %lu rollforward entries\n", rollforward_table_size);
+  // ./sum_array <array_block_len> <nproc?>
   array_block_len = atol(argv[1]);
+  uint64_t sys_nproc = sysconf(_SC_NPROCESSORS_ONLN);
+  nproc = sys_nproc;
+  //nproc = (argc >= 2) ? atol(argv[2]) : sys_nproc;
   array_len = array_block_len * nproc;
   array = (uint64_t*)malloc(sizeof(uint64_t) * array_len);
   sums = (uint64_t*)malloc(sizeof(uint64_t) * nproc);
@@ -101,7 +103,7 @@ int main(int argc, char **argv) {
     array[i] = 1;
   }
 
-  printf("array length = %lu, nproc = %lu\n", array_len, nproc);
+  //printf("array length = %lu, nproc = %lu\n", array_len, nproc);
 
   threads = (pthread_t *)malloc(sizeof(pthread_t) * nproc);
 
@@ -124,16 +126,16 @@ int main(int argc, char **argv) {
   for (int i = 0; i < nproc; i++) {
     sum += sums[i];
   }
-  printf("sum = %lu\n", sum);
+  uint64_t result = sum;
   uint64_t handler_calls = 0;
   for (int i = 0; i < nproc; i++) {
     handler_calls += nb_handler_calls[i];
   }
-  printf("handler calls = %lu\n", handler_calls);
   free(array);
   free(sums);
   free(threads);
   free(nb_handler_calls);
+  printf("%lu, %lu, %lu, %lu\n", nproc, result, handler_calls, array_len);
   
   return 0;
 }
