@@ -51,9 +51,10 @@ def emit_dst_line(line):
     m = re.search(call_re, srcline)
     # replace calls to functions that look like __rf_handle_*
     if m is not None:
-        print(srcline)
-        print(m)
-        print(m.groups()[0])
+        #print(srcline)
+        #print(m)
+        #print(m.groups()[0])
+        # I commented out the _in_rf suffix b/c it was causing the assembler to fail --Mike
         srcline = srcline.replace(m.groups()[0], m.groups()[0]) # + '_in_rf')
     out.write(srcline)
 
