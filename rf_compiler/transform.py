@@ -33,7 +33,6 @@ def should_emit_rf_label(line):
     if re.match(globalsymbol_regex, line) is None:
         return True
 
-
     return False
 
 def emit_src_line(line):
@@ -78,9 +77,9 @@ out.write('.data\n')
 out.write('rollforward_table:\n')
 size = 0
 for i, line in enumerate(lines):
-    size += 1
     if should_emit_rf_label(line):
         out.write(f'  .quad __RF_SRC_{i}, __RF_DST_{i}\n')
+        size += 1
     
 out.write('\n\n')
 out.write('rollback_table:\n')
