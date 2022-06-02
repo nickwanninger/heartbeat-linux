@@ -24,7 +24,8 @@ for line in lines:
     for match in matches:
         local_labels.append(match[:-1])
 
-call_re = re.compile('callq\s+__rf_handle_(\w+)')
+#call_re = re.compile('call(\w+)__rf_handle_(\w+)')
+call_re = re.compile('call.+__rf_handle_.+')
 
 
 def should_emit_rf_label(line):
@@ -58,9 +59,10 @@ def emit_dst_line(line):
 
     m = re.search(call_re, srcline)
     # replace calls to functions that look like __rf_handle_*
-    if m is not None:
+    #if m is not None:
         # I commented out the _in_rf suffix b/c it was causing the assembler to fail --Mike
-        srcline = srcline.replace(m.groups()[0], m.groups()[0]) # + '_in_rf')
+        #srcline = '# removed handler call'
+        #srcline = srcline.replace(m.groups()[0], m.groups()[0])
     out.write(srcline)
 
 
@@ -87,3 +89,4 @@ for i, line in enumerate(lines):
     if should_emit_rf_label(line):
         out.write(f'  .quad __RF_DST_{i}, __RF_SRC_{i}\n')
 out.write(f'rollforward_table_size: .quad {size}\n')
+out.write(f'rollback_table_size: .quad {size}\n')
