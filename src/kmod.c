@@ -83,13 +83,13 @@ static void hb_timer_dispatch(void *arg) {
 
         while (i <= j) {
           k = i + ((j - i) / 2);
-          if (hb->rfs[k].from == src) {
-            regs->ip = hb->rfs[k].to;
+          if ((off_t)hb->rfs[k].from == (off_t)src) {
+            regs->ip = (off_t)hb->rfs[k].to;
             if (!hb->repeat) {
               return;
             }
             break;
-          } else if (hb->rfs[k].from < src) {
+          } else if ((off_t)hb->rfs[k].from < (off_t)src) {
             i = k + 1;
           } else {
             j = k - 1;
@@ -116,9 +116,9 @@ static void hb_timer_dispatch(void *arg) {
  */
 static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
   struct hb_priv *hb;
-  struct pt_regs *regs;
-  uint64_t old_sp;
-  int i;
+  //  struct pt_regs *regs;
+  //  uint64_t old_sp;
+  //  int i;
 
 
   // Grab the heartbeat private data from the timer itself
@@ -183,12 +183,12 @@ static int hb_dev_open(struct inode *inodep, struct file *filep) {
   // Allocate the private data and ensure that it is zeroed
   hb = filep->private_data = kmalloc(sizeof(struct hb_priv), GFP_KERNEL);
   memset(filep->private_data, 0, sizeof(struct hb_priv));
-  DEBUG("Private data after: %llx\n", filep->private_data);
+  DEBUG("Private data after: %llx\n", (long long unsigned int)filep->private_data);
   // Configure the owner `task_struct` for this hb_priv.
   hb->owner = current;
   hb->rfs = NULL;
   hb->nrfs = 0;
-  hb->return_address = NULL;
+  hb->return_address = (off_t)NULL;
   hb->heartbeat_count = 0;
   // And finally initialize the hrtimer in the private data
   // with our callback function.
@@ -201,7 +201,7 @@ static int hb_dev_release(struct inode *inodep, struct file *filep) {
   struct hb_priv *hb;
 
   hb = filep->private_data;
-  INFO("Closed heartbeat device %llx with %lu heartbeats\n", (off_t)filep->private_data, hb->heartbeat_count);
+  INFO("Closed heartbeat device %llx with %lu heartbeats\n", (long long unsigned int)filep->private_data, (long unsigned int)hb->heartbeat_count);
 
 
   // call on the owner core, and wait
@@ -220,13 +220,13 @@ static volatile int glob = 0;
  */
 static long hb_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
   struct hb_priv *hb;
-  int i;
+  //  int i;
   uint64_t ns;
 
   // Grab the private data from the file like in other methods
   hb = file->private_data;
 
-  DEBUG("%d Heartbeat ioctl %llx from current=%llx\n", smp_processor_id(), hb, current);
+  DEBUG("%d Heartbeat ioctl %llx from current=%llx\n", smp_processor_id(), (long long unsigned int)hb, (long long unsigned int)current);
 
   // sanity check heartbeat state.
   if (hb == NULL) return -EINVAL;

@@ -1,6 +1,7 @@
 { pkgs   ? import <nixpkgs> {},
   stdenv ? pkgs.stdenv,
-  kernel1 ? pkgs.linuxKernel.kernels.linux_zen,
+  kernel1 ? pkgs.linuxKernel.kernels.linux_5_18,
+#  kernel1 ? pkgs.linuxKernel.kernels.linux_zen,
   nukeReferences ? pkgs.nukeReferences
 }:
 
