@@ -39,7 +39,7 @@ $(MOD): src/kmod.c
 	mkdir -p build
 	make -C /lib/modules/$(shell uname -r)/build/ M=$(PWD) modules
 # To build on Rainey's desktop nixos machine, use the command below.
-#	make -C $(nix-build -E '(import <nixpkgs> {}).linuxKernel.kernels.linux_zen.dev' --no-out-link)/lib/modules/*/build M=$(pwd) modules
+#	make -C $(nix-build -E '(import <nixpkgs> {}).linuxKernel.kernels.linux_5_18.dev' --no-out-link)/lib/modules/*/build M=$(pwd) modules
 
 
 # insert the module into the kernel
