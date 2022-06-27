@@ -13,6 +13,7 @@ commsymbol_regex = r'^\s+\.comm.+'
 weakrefsymbol_regex = r'^\s+\.weakref.+'
 weaksymbol_regex = r'^\s+\.weak.+'
 setsymbol_regex = r'^\s+\.set.+'
+filesymbol_regexp = r'^\s+\.file.+'
 
 lines = list(infile)
 # Find all the labels that match `.XX` (.LBBN_M for example)
@@ -56,6 +57,7 @@ def emit_dst_line(line):
     srcline = re.sub(weakrefsymbol_regex, '# removed', srcline)
     srcline = re.sub(weaksymbol_regex, '# removed', srcline)
     srcline = re.sub(setsymbol_regex, '# removed', srcline)
+    srcline = re.sub(filesymbol_regexp, '# removed', srcline)
 
     m = re.search(call_re, srcline)
     # replace calls to functions that look like __rf_handle_*
