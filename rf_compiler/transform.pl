@@ -4,7 +4,7 @@
 
 $localsymbol_regex = '^\.[\w.]+:';
 
-$globalsymbol_regex = '^[^.].+:';
+$globalsymbol_regex = '^[^.].*:';
 $commsymbol_regex = '^\s+\.comm.+';
 $weakrefsymbol_regex = '^\s+\.weakref.+';
 $weaksymbol_regex = '^\s+\.weak.+';
