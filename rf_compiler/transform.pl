@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl
 
 # changed above from globalsymbol_regex = r'^[^.]\w+:' -- Mike
 

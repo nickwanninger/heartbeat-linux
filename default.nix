@@ -1,6 +1,8 @@
 { pkgs   ? import <nixpkgs> {},
   stdenv ? pkgs.stdenv,
-  cc ? pkgs.gcc
+  cc ? pkgs.gcc,
+  perlPackages ? pkgs.perl534Packages,
+  mkWrapper ? pkgs.makeWrapper
 }:
 
 stdenv.mkDerivation rec {
@@ -8,7 +10,7 @@ stdenv.mkDerivation rec {
 
   src = ./.;
 
-  buildInputs = [ cc ];
+  buildInputs = [ cc mkWrapper ];
 
   buildPhase = ''
     make build/libhb.so
@@ -25,6 +27,11 @@ stdenv.mkDerivation rec {
     cp rf_compiler/transform.py $out/rf_compiler
     cp rf_compiler/transform.pl $out/rf_compiler
     cp src/entry.S $out/rf_compiler
+  '';
+
+  postFixup = ''
+    wrapProgram $out/rf_compiler/transform.pl \
+      --prefix PERL5LIB : "${with perlPackages; makePerlPath [  ]}"
   '';
 
   meta = {
