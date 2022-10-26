@@ -3,10 +3,11 @@
 set -e
 
 make kmod -j$(nproc)
+make root/main
 
 WORKSPACE=$(pwd)
 
-pushd alpine-root
+pushd root
 	pwd
 	find . -print0 \
 		| cpio --quiet --null -ov --format=newc \
@@ -23,7 +24,7 @@ QEMU_FLAGS+="-nographic "
 QEMU_FLAGS+="-netdev user,id=u1 -device e1000,netdev=u1 "
 QEMU_FLAGS+="-rtc base=localtime "
 # QEMU_FLAGS+="-cdrom alpine-standard-3.15.4-x86_64.iso "
-QEMU_FLAGS+="-drive file=root.qcow2,format=qcow2 "
+# QEMU_FLAGS+="-drive file=root.qcow2,format=qcow2 "
 
 echo $QEMU_FLAGS
 qemu-system-x86_64 $QEMU_FLAGS -append "console=ttyS0 root=/dev/sda" $@

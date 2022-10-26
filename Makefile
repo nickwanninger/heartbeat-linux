@@ -1,4 +1,4 @@
-CC=gclang
+CC=gcc
 ARCH=x86_64
 
 # configure your linux!
@@ -18,6 +18,9 @@ build/linux_tag:
 	touch build/linux_tag
 
 
+root/main: user/main.c
+	gcc -static -o $@ $^
+
 menuconfig: build/linux_tag
 	@$(MAKE) $(MARGS) -C $(LINUX_DIR) menuconfig
 
@@ -31,8 +34,8 @@ PWD := $(CURDIR)
 
 kmod: linux
 	$(MAKE) $(MARGS) -C $(PWD)/build M=$(PWD)/module modules 
-	@mkdir -p root/etc/modules/
-	@cp module/mod.ko root/etc/modules/
+	@mkdir -p root/etc/
+	@cp module/mod.ko root/etc/
  
 clean: 
 	$(MAKE) $(MARGS) -C $(PWD)/build M=$(PWD)/module clean
