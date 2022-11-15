@@ -19,7 +19,9 @@ build/linux_tag:
 
 
 root/main: user/main.c
-	gcc -static -o $@ $^
+	clang -O3 -g3 -S -o build/main.S $^
+	perl user/transform.pl build/main.S build/main.transform.S
+	clang -O3 -g3 -pthread -lm -static -o $@ build/main.transform.S
 
 menuconfig: build/linux_tag
 	@$(MAKE) $(MARGS) -C $(LINUX_DIR) menuconfig

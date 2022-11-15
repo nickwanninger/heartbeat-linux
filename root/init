@@ -1,5 +1,6 @@
 #!/bin/sh
 
+mkdir -p /proc /sys /dev
 mount -t proc none /proc
 mount -t sysfs none /sys
 mount -t devfs none /dev
@@ -9,5 +10,10 @@ hostname -F /etc/hostname
 cat /etc/motd
 echo "inserting the kernel module:"
 insmod /etc/mod.ko
+
+mknod /dev/heartbeat c 248 0
+
+# /main 10000 h
+# /main 10000 t
 
 exec /bin/sh
