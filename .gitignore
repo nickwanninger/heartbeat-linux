@@ -18,3 +18,5 @@ mod.o
 modules.order
 
 linux-5.17.5
+
+root/main
