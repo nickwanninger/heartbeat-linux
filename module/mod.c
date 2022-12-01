@@ -1,10 +1,12 @@
 #include "./heartbeat_kmod.h"
+#include <asm/apic.h>
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/hrtimer.h>
 #include <linux/init.h>
+#include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/ktime.h>
 #include <linux/module.h>
@@ -29,6 +31,7 @@ static int major = -1;
 static struct class *deviceclass = NULL;
 static struct device *device = NULL;
 
+static int hb_vector = -1;
 /**
  * struct hb_priv
  *
@@ -101,24 +104,11 @@ static void hb_timer_dispatch(void *arg) {
   }
 }
 
-/**
- * hb_timer_handler
- *
- * This function acts as the callback function for the heartbeat timer.
- * It deliveres heartbeats by directly editing the pt_regs structure of
- * the 'owner' thread (the thread which initialized the ioctl) to point
- * to a configured return address.
- *
- * We can only safely change the return address iff current == owner,
- * otherwise we run into race conditions. The only way to solve those
- * race conditions would be to use IPIs, which would be an enormous
- * latency hit when targeting ~10us heartbeats.
- */
+static int hist[32];
+static int next_hist = 0;
+
 static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
   struct hb_priv *hb;
-
-  // if (!in_task())
-  //   goto restart;
 
   // Grab the heartbeat private data from the timer itself
   hb = container_of(timer, struct hb_priv, timer);
@@ -126,16 +116,19 @@ static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
   // hb->done will have a 1 written to it. This is intended to abort
   // any heartbeat ASAP without corrupting the kernel state.
   if (hb->done) {
-    INFO("done\n");
+    // INFO("done\n");
     return HRTIMER_NORESTART;
   }
 
   hb->heartbeat_count++;
-  // INFO("Deliver!\n");
 
   // dispatch the heartbeat to the other cores
-  on_each_cpu(hb_timer_dispatch, (void *)hb, 1);
+  // on_each_cpu(hb_timer_dispatch, (void *)hb, 1);
 
+  if (hb_vector != -1) {
+    // printk("About to send apic %llx!\n", apic);
+    apic->send_IPI_all(hb_vector);
+  }
   if (!hb->repeat) {
     return HRTIMER_NORESTART;
   }
@@ -148,12 +141,6 @@ restart:
   return HRTIMER_RESTART;
 }
 
-/**
- * hb_cleanup_on_core
- *
- * This method is invoked via an ipi request on release to ensure
- * that the hrtimer is cancelled from the core that created it
- */
 static void hb_cleanup_on_core(void *arg) {
   struct hb_priv *hb;
   hb = arg;
@@ -187,16 +174,21 @@ static int hb_dev_open(struct inode *inodep, struct file *filep) {
   memset(filep->private_data, 0, sizeof(struct hb_priv));
   INFO("Private data after: %llx\n",
        (long long unsigned int)filep->private_data);
+
+  get_cpu();
   // Configure the owner `task_struct` for this hb_priv.
   hb->owner = current;
   hb->rfs = NULL;
   hb->nrfs = 0;
   hb->return_address = (off_t)NULL;
   hb->heartbeat_count = 0;
+
+  INFO("open on core %d\n", smp_processor_id());
   // And finally initialize the hrtimer in the private data
   // with our callback function.
   hrtimer_init(&hb->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
   hb->timer.function = hb_timer_handler;
+  put_cpu();
   return 0;
 }
 
@@ -215,8 +207,6 @@ static int hb_dev_release(struct inode *inodep, struct file *filep) {
   return 0;
 }
 
-static volatile int glob = 0;
-
 /**
  * hb_ioctl
  *
@@ -230,9 +220,6 @@ static long hb_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
 
   // Grab the private data from the file like in other methods
   hb = file->private_data;
-
-  DEBUG("%d Heartbeat ioctl %llx from current=%llx\n", smp_processor_id(),
-        (long long unsigned int)hb, (long long unsigned int)current);
 
   // sanity check heartbeat state.
   if (hb == NULL)
@@ -258,6 +245,7 @@ static long hb_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
     hb->core = smp_processor_id();
     hb->repeat = config.repeat;
 
+    INFO("schedule on core %d\n", smp_processor_id());
     // and schedule the hrtimer
     hrtimer_forward_now(&hb->timer, ns_to_ktime(ns));
     hrtimer_start(&hb->timer, ns_to_ktime(ns), HRTIMER_MODE_REL);
@@ -303,6 +291,10 @@ static struct file_operations fops = {
     .release = hb_dev_release,
 };
 
+void hb_irq_handler(int irq, void *arg, struct pt_regs *regs) {
+  printk("hb irq handler\n");
+}
+
 /**
  * heartbeat_init
  *
@@ -312,6 +304,8 @@ static struct file_operations fops = {
  * might break
  */
 static int __init heartbeat_init(void) {
+  int i;
+  int rc;
   deviceclass = NULL;
   device = NULL;
   // first, we create the device node in Linux
@@ -338,6 +332,25 @@ static int __init heartbeat_init(void) {
     return PTR_ERR(device);
   }
 
+  for (hb_vector = 240; hb_vector > 0; hb_vector--) {
+    // set_irq_flags(hb_vector, IRQF_VALID);
+    rc = request_irq(hb_vector, (void *)hb_irq_handler, IRQF_SHARED,
+                     "Heartbeat", &fops);
+    if (rc == 0) {
+      INFO("Found irq at %d\n", hb_vector);
+      break;
+    }
+  }
+  if (hb_vector == 240)
+    hb_vector = -1;
+
+  if (hb_vector != -1) {
+    for (i = 0; i < 10; i++) {
+      apic->send_IPI_all(hb_vector);
+    }
+  }
+  INFO("hb_vector=%d\n", hb_vector);
+
   INFO("Finished initialization\n");
 
   return 0;
@@ -355,6 +368,8 @@ static void __exit heartbeat_exit(void) {
     class_destroy(deviceclass);                   // remove the device class
   }
   unregister_chrdev(major, DEV_NAME); // unregister the major number
+  free_irq(hb_vector, &fops);
+
   return;
 }
 
