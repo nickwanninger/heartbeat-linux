@@ -26,7 +26,8 @@ stdenv.mkDerivation rec {
     mkdir $out/rf_compiler
     cp rf_compiler/transform.py $out/rf_compiler
     cp rf_compiler/transform.pl $out/rf_compiler
-    cp src/entry.S $out/rf_compiler
+    mkdir -p $out/src
+    cp src/entry.S $out/src
   '';
 
   postFixup = ''
