@@ -35,6 +35,7 @@ linux: build/linux_tag
 PWD := $(CURDIR)
 
 kmod: linux
+	@mkdir -p $(PWD)/build/kmod
 	$(MAKE) $(MARGS) -C $(PWD)/build M=$(PWD)/module modules 
 	@mkdir -p root/etc/
 	@cp module/mod.ko root/etc/

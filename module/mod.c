@@ -291,8 +291,16 @@ static struct file_operations fops = {
     .release = hb_dev_release,
 };
 
+// TODO: call this with send_IPI_all();
 void hb_irq_handler(int irq, void *arg, struct pt_regs *regs) {
   printk("hb irq handler\n");
+}
+
+static void interrupt_setup() {
+  // TODO: pick an interrupt vector
+
+  // send the IPI to that vector
+  if (hb_vector != -1) apic->send_IPI_all(hb_vector);
 }
 
 /**
@@ -304,8 +312,12 @@ void hb_irq_handler(int irq, void *arg, struct pt_regs *regs) {
  * might break
  */
 static int __init heartbeat_init(void) {
+
   int i;
   int rc;
+
+  interrupt_setup();
+
   deviceclass = NULL;
   device = NULL;
   // first, we create the device node in Linux
@@ -332,23 +344,23 @@ static int __init heartbeat_init(void) {
     return PTR_ERR(device);
   }
 
-  for (hb_vector = 240; hb_vector > 0; hb_vector--) {
-    // set_irq_flags(hb_vector, IRQF_VALID);
-    rc = request_irq(hb_vector, (void *)hb_irq_handler, IRQF_SHARED,
-                     "Heartbeat", &fops);
-    if (rc == 0) {
-      INFO("Found irq at %d\n", hb_vector);
-      break;
-    }
-  }
-  if (hb_vector == 240)
-    hb_vector = -1;
+  // for (hb_vector = 240; hb_vector > 0; hb_vector--) {
+  //   // set_irq_flags(hb_vector, IRQF_VALID);
+  //   rc = request_irq(hb_vector, (void *)hb_irq_handler, IRQF_SHARED,
+  //                    "Heartbeat", &fops);
+  //   if (rc == 0) {
+  //     INFO("Found irq at %d\n", hb_vector);
+  //     break;
+  //   }
+  // }
+  // if (hb_vector == 240)
+  //   hb_vector = -1;
 
-  if (hb_vector != -1) {
-    for (i = 0; i < 10; i++) {
-      apic->send_IPI_all(hb_vector);
-    }
-  }
+  // if (hb_vector != -1) {
+  //   for (i = 0; i < 10; i++) {
+  //     apic->send_IPI_all(hb_vector);
+  //   }
+  // }
   INFO("hb_vector=%d\n", hb_vector);
 
   INFO("Finished initialization\n");

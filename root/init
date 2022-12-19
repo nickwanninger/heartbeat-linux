@@ -8,6 +8,7 @@ mount -t devfs none /dev
 hostname -F /etc/hostname
 
 cat /etc/motd
+sleep 1
 echo "inserting the kernel module:"
 insmod /etc/mod.ko
 

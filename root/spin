@@ -1,0 +1,7 @@
+#!/bin/sh
+
+while true
+do
+
+  /main 10000 heartbeat 24
+done
