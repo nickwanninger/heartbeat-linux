@@ -1,4 +1,5 @@
 #include "./heartbeat_kmod.h"
+
 #include <asm/apic.h>
 #include <linux/device.h>
 #include <linux/err.h>
@@ -15,6 +16,8 @@
 #include <linux/slab.h>
 #include <linux/smp.h>
 #include <linux/uaccess.h>
+
+#include <linux/delay.h>
 
 #define INFO(...) printk(KERN_INFO "Heartbeat: " __VA_ARGS__)
 
@@ -291,17 +294,120 @@ static struct file_operations fops = {
     .release = hb_dev_release,
 };
 
-// TODO: call this with send_IPI_all();
-void hb_irq_handler(int irq, void *arg, struct pt_regs *regs) {
-  printk("hb irq handler\n");
+/* ---- Begin modifications ---- */
+
+#define CR0_WP (1u << 16)
+#define HB_VECTOR 0xda
+
+unsigned long hb_error_entry;
+module_param_named(hb_error_entry, hb_error_entry, ulong, 0);
+MODULE_PARM_DESC(hb_error_entry, "Address of the `hb_error_entry` symbol");
+
+unsigned long hb_error_return;
+module_param_named(hb_error_return, hb_error_return, ulong, 0);
+MODULE_PARM_DESC(hb_error_return, "Address of the `hb_error_return` symbol");
+
+uint64_t original_HB_handler;
+extern void * _hb_idt_entry;
+
+static void force_write_cr0(unsigned long new_val) {
+    asm __volatile__ (
+        "mov %0, %%rdi;"
+        "mov %%rdi, %%cr0;"
+        ::"m"(new_val)
+    );
 }
 
-static void interrupt_setup() {
+static unsigned long force_read_cr0(void) { 
+    unsigned long cr0_val;
+    asm __volatile__ (
+        "mov %%cr0, %%rdi;"
+        "mov %%rdi, %0;"
+        :"=m"(cr0_val)
+    );
+    return cr0_val;
+}
+
+static struct desc_ptr get_idtr(void) {
+    struct desc_ptr idtr;
+    asm __volatile__("sidt %0" : "=m"(idtr));
+    return idtr;
+}
+
+static uint64_t extract_handler_address(gate_desc * gd) {
+    uint64_t handler;
+	handler = (uint64_t) gd->offset_low;
+	handler += (uint64_t) gd->offset_middle << 16;
+	handler += (uint64_t) gd->offset_high << 32;
+    return handler;
+}
+
+static void write_handler_address_to_gd(gate_desc * gd, unsigned long handler) {
+    uint16_t low = (uint16_t) (handler);
+    uint16_t middle =(uint16_t) (handler >> 16);
+    uint32_t high = (uint32_t) (handler >> 32);
+    gd->offset_low = low;
+    gd->offset_middle = middle;
+    gd->offset_high = high;
+}
+
+static void modify_idt(void) {
+    struct desc_ptr IDTR;
+    gate_desc * idt;
+    gate_desc * HB_gate_desc;
+    uint64_t new_HB_handler;
+
+    // Get IDTR to find IDT base
+    IDTR = get_idtr();
+    idt = (gate_desc *) IDTR.address;
+    printk("[*] IDT @ 0x%px\n", idt);
+
+    // Offset into IDT to #XF Gate Desc
+    HB_gate_desc = idt + HB_VECTOR;
+
+    // Save the old gate descriptor info in case
+    original_HB_handler = extract_handler_address(HB_gate_desc); 
+
+    // Disable write protections
+    force_write_cr0(force_read_cr0() & ~(CR0_WP));
+
+    // Put our fake gate descriptor in
+    write_handler_address_to_gd(HB_gate_desc, (unsigned long) &_hb_idt_entry);
+    new_HB_handler = extract_handler_address(HB_gate_desc); 
+
+    // Enable write protections
+    force_write_cr0(force_read_cr0() | CR0_WP);
+
+    // Profit
+    printk("[!] Modified IDT: 0x%llx -> 0x%llx\n", original_HB_handler, new_HB_handler);
+}
+
+// TODO: call this with send_IPI_all();i
+void hb_irq_handler(struct pt_regs *regs) {
+  printk("hb irq handler\n");
+}
+EXPORT_SYMBOL(hb_irq_handler);
+
+struct user_process_info {
+  void (*user_handler)(void);
+  void * state_save_area;
+} user_proc_info;
+
+static void interrupt_setup(void) {
   // TODO: pick an interrupt vector
+  // I chose 0xDA :D
+  hb_vector = HB_VECTOR;
+
+  modify_idt();
+
+  // msleep(5000);
 
   // send the IPI to that vector
   if (hb_vector != -1) apic->send_IPI_all(hb_vector);
 }
+
+
+/* ---- End modifications ---- */
 
 /**
  * heartbeat_init
