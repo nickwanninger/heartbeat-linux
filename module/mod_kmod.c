@@ -310,6 +310,8 @@ MODULE_PARM_DESC(hb_error_return, "Address of the `hb_error_return` symbol");
 uint64_t original_HB_handler;
 extern void * _hb_idt_entry;
 
+int cpu_checkin[8] = {0};
+
 static void force_write_cr0(unsigned long new_val) {
     asm __volatile__ (
         "mov %0, %%rdi;"
@@ -356,11 +358,16 @@ static void modify_idt(void) {
     gate_desc * idt;
     gate_desc * HB_gate_desc;
     uint64_t new_HB_handler;
+		uint64_t debug_handler;
 
     // Get IDTR to find IDT base
     IDTR = get_idtr();
     idt = (gate_desc *) IDTR.address;
     printk("[*] IDT @ 0x%px\n", idt);
+
+		// DEBUG
+		debug_handler = extract_handler_address(idt + 0xf7);
+		printk("DEBUG HANDLER %llx\n", debug_handler);
 
     // Offset into IDT to #XF Gate Desc
     HB_gate_desc = idt + HB_VECTOR;
@@ -382,16 +389,42 @@ static void modify_idt(void) {
     printk("[!] Modified IDT: 0x%llx -> 0x%llx\n", original_HB_handler, new_HB_handler);
 }
 
-// TODO: call this with send_IPI_all();i
+#pragma GCC push_options
+#pragma GCC optimize("O0")
 void hb_irq_handler(struct pt_regs *regs) {
-  printk("hb irq handler\n");
+	asm __volatile__("cli");
+	int cpu = smp_processor_id();
+	cpu_checkin[cpu] = 1;
+  printk("CPU 0x%x: Hit hb irq handler\n", cpu);
+	asm __volatile__("sti");
+	return;
 }
+#pragma GCC pop_options
 EXPORT_SYMBOL(hb_irq_handler);
 
 struct user_process_info {
   void (*user_handler)(void);
   void * state_save_area;
 } user_proc_info;
+
+static void wait_cpu_checkin(void) { 
+	int cpu;
+	bool all_done;
+	
+	while(true) {
+		all_done = true;
+		for (cpu = 0; cpu < 1; cpu++) {
+			if (cpu_checkin[cpu] != 1) {
+				all_done = false;
+			}
+		}
+		if (all_done) { 
+			break;
+		}
+	}
+	printk("CPUs all checked in\n");
+	return;
+}
 
 static void interrupt_setup(void) {
   // TODO: pick an interrupt vector
@@ -400,11 +433,16 @@ static void interrupt_setup(void) {
 
   modify_idt();
 
-  // msleep(5000);
+	__atomic_thread_fence(__ATOMIC_SEQ_CST);
+	asm __volatile__("mfence":::"memory");
+	printk("hb_irq_handler addr: 0x%px\n", hb_irq_handler);
+	printk("wait_cpu_checkin addr: 0x%px\n", &wait_cpu_checkin);
 
   // send the IPI to that vector
-  if (hb_vector != -1) apic->send_IPI_all(hb_vector);
+  //if (hb_vector != -1) apic->send_IPI_allbutself(hb_vector);
+	if (hb_vector != -1) apic->send_IPI_all(hb_vector);
 }
+
 
 
 /* ---- End modifications ---- */
@@ -421,7 +459,7 @@ static int __init heartbeat_init(void) {
 
   int i;
   int rc;
-
+	asm __volatile__("cli");
   interrupt_setup();
 
   deviceclass = NULL;
@@ -467,10 +505,14 @@ static int __init heartbeat_init(void) {
   //     apic->send_IPI_all(hb_vector);
   //   }
   // }
+
+	wait_cpu_checkin();
+
   INFO("hb_vector=%d\n", hb_vector);
+  
+	INFO("Finished initialization\n");
 
-  INFO("Finished initialization\n");
-
+	asm __volatile__("sti");
   return 0;
 }
 
