@@ -1,0 +1,26 @@
+#!/bin/sh
+
+mkdir -p /proc /sys /dev
+mount -t proc none /proc
+mount -t sysfs none /sys
+mount -t devfs none /dev
+
+hostname -F /etc/hostname
+
+cat /etc/motd
+sleep 1
+echo "inserting the kernel module:"
+insmod /etc/mod.ko \
+    hb_error_entry=0x$(grep ' error_entry' /proc/kallsyms | cut -d' ' -f1) \
+    hb_error_return=0x$(grep ' error_return' /proc/kallsyms | cut -d' ' -f1)
+
+echo "Came back from insmod!"
+
+mknod /dev/heartbeat c 248 0
+
+echo "Came back from mknod!"
+
+# /main 10000 h
+# /main 10000 t
+
+exec /bin/sh
