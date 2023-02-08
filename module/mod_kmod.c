@@ -310,8 +310,6 @@ MODULE_PARM_DESC(hb_error_return, "Address of the `hb_error_return` symbol");
 uint64_t original_HB_handler;
 extern void * _hb_idt_entry;
 
-int cpu_checkin[8] = {0};
-
 static void force_write_cr0(unsigned long new_val) {
     asm __volatile__ (
         "mov %0, %%rdi;"
@@ -392,7 +390,6 @@ static void modify_idt(void) {
 void hb_irq_handler(struct pt_regs *regs) {
 	asm __volatile__("cli");
 	int cpu = smp_processor_id();
-	cpu_checkin[cpu] = 1;
   printk("[+] CPU 0x%x: Hit hb irq handler\n", cpu);
 	apic_eoi();
 	asm __volatile__("sti");
@@ -413,6 +410,8 @@ static void interrupt_setup(void) {
 
 	__atomic_thread_fence(__ATOMIC_SEQ_CST);
 	asm __volatile__("mfence":::"memory");
+
+	printk("hb_irq_handler: %px\n", hb_irq_handler);
 
   // send the IPI to that vector
   if (hb_vector != -1) apic->send_IPI_allbutself(hb_vector);
