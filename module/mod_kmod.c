@@ -30,6 +30,9 @@
 #endif
 #define DEV_NAME "heartbeat"
 
+#define CR0_WP (1u << 16)
+#define HB_VECTOR 0xda
+
 static int major = -1;
 static struct class *deviceclass = NULL;
 static struct device *device = NULL;
@@ -296,9 +299,6 @@ static struct file_operations fops = {
 
 /* ---- Begin modifications ---- */
 
-#define CR0_WP (1u << 16)
-#define HB_VECTOR 0xda
-
 unsigned long hb_error_entry;
 module_param_named(hb_error_entry, hb_error_entry, ulong, 0);
 MODULE_PARM_DESC(hb_error_entry, "Address of the `hb_error_entry` symbol");
@@ -389,17 +389,16 @@ static void modify_idt(void) {
     printk("[!] Modified IDT: 0x%llx -> 0x%llx\n", original_HB_handler, new_HB_handler);
 }
 
-#pragma GCC push_options
-#pragma GCC optimize("O0")
 void hb_irq_handler(struct pt_regs *regs) {
 	asm __volatile__("cli");
 	int cpu = smp_processor_id();
 	cpu_checkin[cpu] = 1;
-  printk("CPU 0x%x: Hit hb irq handler\n", cpu);
+  printk("[+] CPU 0x%x: Hit hb irq handler\n", cpu);
+	apic_eoi();
 	asm __volatile__("sti");
 	return;
 }
-#pragma GCC pop_options
+
 EXPORT_SYMBOL(hb_irq_handler);
 
 struct user_process_info {
@@ -407,42 +406,18 @@ struct user_process_info {
   void * state_save_area;
 } user_proc_info;
 
-static void wait_cpu_checkin(void) { 
-	int cpu;
-	bool all_done;
-	
-	while(true) {
-		all_done = true;
-		for (cpu = 0; cpu < 1; cpu++) {
-			if (cpu_checkin[cpu] != 1) {
-				all_done = false;
-			}
-		}
-		if (all_done) { 
-			break;
-		}
-	}
-	printk("CPUs all checked in\n");
-	return;
-}
-
 static void interrupt_setup(void) {
-  // TODO: pick an interrupt vector
-  // I chose 0xDA :D
   hb_vector = HB_VECTOR;
 
   modify_idt();
 
 	__atomic_thread_fence(__ATOMIC_SEQ_CST);
 	asm __volatile__("mfence":::"memory");
-	printk("hb_irq_handler addr: 0x%px\n", hb_irq_handler);
-	printk("wait_cpu_checkin addr: 0x%px\n", &wait_cpu_checkin);
 
   // send the IPI to that vector
-  //if (hb_vector != -1) apic->send_IPI_allbutself(hb_vector);
-	if (hb_vector != -1) apic->send_IPI_all(hb_vector);
+  if (hb_vector != -1) apic->send_IPI_allbutself(hb_vector);
+	//if (hb_vector != -1) apic->send_IPI_all(hb_vector);
 }
-
 
 
 /* ---- End modifications ---- */
@@ -459,8 +434,11 @@ static int __init heartbeat_init(void) {
 
   int i;
   int rc;
-	asm __volatile__("cli");
-  interrupt_setup();
+
+	unsigned long flags;
+	local_irq_save(flags);
+  
+	interrupt_setup();
 
   deviceclass = NULL;
   device = NULL;
@@ -506,13 +484,11 @@ static int __init heartbeat_init(void) {
   //   }
   // }
 
-	wait_cpu_checkin();
-
-  INFO("hb_vector=%d\n", hb_vector);
-  
+  INFO("hb_vector=%d\n", hb_vector);  
 	INFO("Finished initialization\n");
+	
+	local_irq_restore(flags);
 
-	asm __volatile__("sti");
   return 0;
 }
 

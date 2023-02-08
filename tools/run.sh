@@ -15,7 +15,7 @@ pushd root
 popd
 
 
-QEMU_FLAGS="-smp cores=1,sockets=1 -m 8G -machine q35 "
+QEMU_FLAGS="-smp cores=8,sockets=1 -m 8G -machine q35 "
 QEMU_FLAGS+="-s "
 QEMU_FLAGS+="-enable-kvm "
 QEMU_FLAGS+="-kernel $WORKSPACE/build/arch/x86_64/boot/bzImage "
