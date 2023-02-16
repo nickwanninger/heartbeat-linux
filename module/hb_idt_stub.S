@@ -8,7 +8,6 @@
 
 
 _hb_idt_entry:
-		nopl (%rax)
 		pushq $0xffffffffffffffff
 		call *hb_error_entry
 		mov %rsp, %rdi

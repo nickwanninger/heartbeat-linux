@@ -113,6 +113,8 @@ static void hb_timer_dispatch(void *arg) {
 static int hist[32];
 static int next_hist = 0;
 
+struct hb_priv * global_hb;
+
 static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
   struct hb_priv *hb;
 
@@ -133,6 +135,9 @@ static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
 
   if (hb_vector != -1) {
     // printk("About to send apic %llx!\n", apic);
+		global_hb = hb;
+		__atomic_thread_fence(__ATOMIC_SEQ_CST);
+		asm __volatile__("mfence":::"memory");
     apic->send_IPI_all(hb_vector);
   }
   if (!hb->repeat) {
@@ -388,11 +393,8 @@ static void modify_idt(void) {
 }
 
 void hb_irq_handler(struct pt_regs *regs) {
-	asm __volatile__("cli");
-	int cpu = smp_processor_id();
-  printk("[+] CPU 0x%x: Hit hb irq handler\n", cpu);
+	hb_timer_dispatch(global_hb);
 	apic_eoi();
-	asm __volatile__("sti");
 	return;
 }
 
@@ -414,7 +416,7 @@ static void interrupt_setup(void) {
 	printk("hb_irq_handler: %px\n", hb_irq_handler);
 
   // send the IPI to that vector
-  if (hb_vector != -1) apic->send_IPI_allbutself(hb_vector);
+  // if (hb_vector != -1) apic->send_IPI_allbutself(hb_vector);
 	//if (hb_vector != -1) apic->send_IPI_all(hb_vector);
 }
 
