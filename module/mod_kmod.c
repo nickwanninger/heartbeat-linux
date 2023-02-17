@@ -45,7 +45,7 @@ static int hb_vector = -1;
  */
 struct hb_priv {
   struct hrtimer timer;
-  struct task_struct *owner;
+  int64_t owner_tgid;
   off_t return_address;
   uint64_t interval_us;
   int repeat;
@@ -68,7 +68,7 @@ static void hb_timer_dispatch(void *arg) {
 
   if (current == NULL)
     return;
-  if (current->tgid != hb->owner->tgid)
+  if (current->tgid != hb->owner_tgid)
     return;
 
   // Grab the register file using the ptrace interface - this may
@@ -189,7 +189,7 @@ static int hb_dev_open(struct inode *inodep, struct file *filep) {
 
   get_cpu();
   // Configure the owner `task_struct` for this hb_priv.
-  hb->owner = current;
+  hb->owner_tgid = current->tgid;
   hb->rfs = NULL;
   hb->nrfs = 0;
   hb->return_address = (off_t)NULL;
@@ -252,7 +252,7 @@ static long hb_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
     // Update the `hb` structure with the required info
     ns = config.interval * 1000;
     hb->interval_us = config.interval;
-    hb->owner = current;
+    hb->owner_tgid = current->tgid;
     hb->return_address = config.handler_address;
     hb->core = smp_processor_id();
     hb->repeat = config.repeat;
