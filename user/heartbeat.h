@@ -3,7 +3,6 @@
 // This header defines the interface by which a userspace process can
 // request a heartbeat interval
 
-
 #include "../module/heartbeat_kmod.h"
 #include <stdint.h>
 
