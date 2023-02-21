@@ -1,11 +1,9 @@
 #pragma once
 
-
 // This include file defines types and macros to interact with the kernel
 // module and /dev/heartbeat
 
 #include <linux/ioctl.h>
-
 
 #define HB_SCHEDULE _IOW('I', 'I', struct hb_configuration *)
 #define HB_SET_ROLLFORWARDS _IOW('I', 'R', struct hb_configuration *)
