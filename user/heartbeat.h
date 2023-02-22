@@ -3,80 +3,19 @@
 // This header defines the interface by which a userspace process can
 // request a heartbeat interval
 
-
-#include "../module/heartbeat_kmod.h"
 #include <stdint.h>
+#include "./heartbeat_internal.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-
-/**
- * When a heartbeat is delivered, these registers are saved on the stack
- * to avoid corruption and a pointer to them is given to the handler.
- */
-typedef struct {
-  uint64_t rax;
-  uint64_t rdi;
-  uint64_t rsi;
-  uint64_t rdx;
-  uint64_t r10;
-  uint64_t r8;
-  uint64_t r9;
-  uint64_t rbx;
-  uint64_t rcx;
-  uint64_t rbp;
-  uint64_t r11;
-  uint64_t r12;
-  uint64_t r13;
-  uint64_t r14;
-  uint64_t r15;
-  uint64_t rflags;
-  uint64_t rip;
-} hb_regs_t;
-
-
-
 void hb_set_rollforwards(struct hb_rollforward *rfs, unsigned count);
-
-/**
- * hb_callback_t
- * The type of functions which can be called by heartbeat
- */
-typedef void (*hb_callback_t)(hb_regs_t *);
-
-
-int hb_init(void);
-
-/**
- * hb_exit
- *
- * Exit the heartbeat timer, destroying the timer in the kernel
- */
-void hb_exit(void);
-
-/**
- * hb_oneshot
- *
- * Schedule a heartbeat to occur once in `us` microseconds
- */
-int hb_oneshot(uint64_t us, hb_callback_t callback);
-
-/**
- * hb_oneshot
- *
- * Schedule a heartbeat to occur every `us` microseconds
- */
-int hb_repeat(uint64_t us, hb_callback_t callback);
-
-/**
- * hb_oneshot
- *
- * cancel the scheduled heartbeat, returning zero (false) if
- * there was not one scheduled.
- */
-int hb_cancel(void);
+int hb_init(void);  // open the hb driver and initialize it for this process
+void hb_exit(void); // close the hb driver (freeing any state we allocated)
+int hb_oneshot(uint64_t us); // Setup a oneshot timer
+int hb_repeat(uint64_t us);  // Setup a repeat timer
+int hb_cancel(void);         // Cancel any timer
 
 #ifdef __cplusplus
 }

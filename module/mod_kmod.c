@@ -1,4 +1,4 @@
-#include "./heartbeat_kmod.h"
+#include "../user/heartbeat_internal.h"
 
 #include <asm/apic.h>
 #include <linux/device.h>
@@ -90,6 +90,7 @@ static void hb_timer_dispatch(void *arg) {
       {
         int64_t i = 0, j = (int64_t)n - 1;
 
+
         while (i <= j) {
           k = i + ((j - i) / 2);
           if ((off_t)hb->rfs[k].from == (off_t)src) {
@@ -113,7 +114,7 @@ static void hb_timer_dispatch(void *arg) {
 static int hist[32];
 static int next_hist = 0;
 
-struct hb_priv * global_hb; 
+struct hb_priv *global_hb;
 
 static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
   struct hb_priv *hb;
@@ -135,17 +136,15 @@ static enum hrtimer_restart hb_timer_handler(struct hrtimer *timer) {
 
   if (hb_vector != -1) {
     // printk("About to send apic %llx!\n", apic);
-		global_hb = hb;
-		__atomic_thread_fence(__ATOMIC_SEQ_CST);
-		asm __volatile__("mfence":::"memory");
+    global_hb = hb;
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+    asm __volatile__("mfence" ::: "memory");
     apic->send_IPI_all(hb_vector);
-
   }
   if (!hb->repeat) {
     return HRTIMER_NORESTART;
   }
 
-restart:
   // When repeating, we must forward the timer to a time in the future.
   // Otherwise the apic or hpet will just interrupt storm the kernel and
   // lock everything up. Not very fun.
@@ -178,9 +177,10 @@ static void hb_cleanup_on_core(void *arg) {
  * is the backbone of heartbeat in the Linux kernel
  */
 static int hb_dev_open(struct inode *inodep, struct file *filep) {
+  struct hb_priv *hb;
+
   INFO("Open\n");
 
-  struct hb_priv *hb;
   // Allocate the private data and ensure that it is zeroed
   hb = filep->private_data = kmalloc(sizeof(struct hb_priv), GFP_KERNEL);
   memset(filep->private_data, 0, sizeof(struct hb_priv));
@@ -256,6 +256,7 @@ static long hb_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
     hb->return_address = config.handler_address;
     hb->core = smp_processor_id();
     hb->repeat = config.repeat;
+    // TODO: cancel if `ns==0`
 
     INFO("schedule on core %d\n", smp_processor_id());
     // and schedule the hrtimer
@@ -314,96 +315,92 @@ module_param_named(hb_error_return, hb_error_return, ulong, 0);
 MODULE_PARM_DESC(hb_error_return, "Address of the `hb_error_return` symbol");
 
 uint64_t original_HB_handler;
-extern void * _hb_idt_entry;
+extern void *_hb_idt_entry;
 
 static void force_write_cr0(unsigned long new_val) {
-    asm __volatile__ (
-        "mov %0, %%rdi;"
-        "mov %%rdi, %%cr0;"
-        ::"m"(new_val)
-    );
+  asm __volatile__("mov %0, %%rdi;"
+                   "mov %%rdi, %%cr0;" ::"m"(new_val));
 }
 
-static unsigned long force_read_cr0(void) { 
-    unsigned long cr0_val;
-    asm __volatile__ (
-        "mov %%cr0, %%rdi;"
-        "mov %%rdi, %0;"
-        :"=m"(cr0_val)
-    );
-    return cr0_val;
+static unsigned long force_read_cr0(void) {
+  unsigned long cr0_val;
+  asm __volatile__("mov %%cr0, %%rdi;"
+                   "mov %%rdi, %0;"
+                   : "=m"(cr0_val));
+  return cr0_val;
 }
 
 static struct desc_ptr get_idtr(void) {
-    struct desc_ptr idtr;
-    asm __volatile__("sidt %0" : "=m"(idtr));
-    return idtr;
+  struct desc_ptr idtr;
+  asm __volatile__("sidt %0" : "=m"(idtr));
+  return idtr;
 }
 
-static uint64_t extract_handler_address(gate_desc * gd) {
-    uint64_t handler;
-	handler = (uint64_t) gd->offset_low;
-	handler += (uint64_t) gd->offset_middle << 16;
-	handler += (uint64_t) gd->offset_high << 32;
-    return handler;
+static uint64_t extract_handler_address(gate_desc *gd) {
+  uint64_t handler;
+  handler = (uint64_t)gd->offset_low;
+  handler += (uint64_t)gd->offset_middle << 16;
+  handler += (uint64_t)gd->offset_high << 32;
+  return handler;
 }
 
-static void write_handler_address_to_gd(gate_desc * gd, unsigned long handler) {
-    uint16_t low = (uint16_t) (handler);
-    uint16_t middle =(uint16_t) (handler >> 16);
-    uint32_t high = (uint32_t) (handler >> 32);
-    gd->offset_low = low;
-    gd->offset_middle = middle;
-    gd->offset_high = high;
+static void write_handler_address_to_gd(gate_desc *gd, unsigned long handler) {
+  uint16_t low = (uint16_t)(handler);
+  uint16_t middle = (uint16_t)(handler >> 16);
+  uint32_t high = (uint32_t)(handler >> 32);
+  gd->offset_low = low;
+  gd->offset_middle = middle;
+  gd->offset_high = high;
 }
 
 static void modify_idt(void) {
-    struct desc_ptr IDTR;
-    gate_desc * idt;
-    gate_desc * HB_gate_desc;
-    uint64_t new_HB_handler;
-		uint64_t debug_handler;
+  struct desc_ptr IDTR;
+  gate_desc *idt;
+  gate_desc *HB_gate_desc;
+  uint64_t new_HB_handler;
+  uint64_t debug_handler;
 
-    // Get IDTR to find IDT base
-    IDTR = get_idtr();
-    idt = (gate_desc *) IDTR.address;
-    printk("[*] IDT @ 0x%px\n", idt);
+  // Get IDTR to find IDT base
+  IDTR = get_idtr();
+  idt = (gate_desc *)IDTR.address;
+  printk("[*] IDT @ 0x%px\n", idt);
 
-		// DEBUG
-		debug_handler = extract_handler_address(idt + 0xf7);
-		printk("DEBUG HANDLER %llx\n", debug_handler);
+  // DEBUG
+  debug_handler = extract_handler_address(idt + 0xf7);
+  printk("DEBUG HANDLER %llx\n", debug_handler);
 
-    // Offset into IDT to #XF Gate Desc
-    HB_gate_desc = idt + HB_VECTOR;
+  // Offset into IDT to #XF Gate Desc
+  HB_gate_desc = idt + HB_VECTOR;
 
-    // Save the old gate descriptor info in case
-    original_HB_handler = extract_handler_address(HB_gate_desc); 
+  // Save the old gate descriptor info in case
+  original_HB_handler = extract_handler_address(HB_gate_desc);
 
-    // Disable write protections
-    force_write_cr0(force_read_cr0() & ~(CR0_WP));
+  // Disable write protections
+  force_write_cr0(force_read_cr0() & ~(CR0_WP));
 
-    // Put our fake gate descriptor in
-    write_handler_address_to_gd(HB_gate_desc, (unsigned long) &_hb_idt_entry);
-    new_HB_handler = extract_handler_address(HB_gate_desc); 
+  // Put our fake gate descriptor in
+  write_handler_address_to_gd(HB_gate_desc, (unsigned long)&_hb_idt_entry);
+  new_HB_handler = extract_handler_address(HB_gate_desc);
 
-    // Enable write protections
-    force_write_cr0(force_read_cr0() | CR0_WP);
+  // Enable write protections
+  force_write_cr0(force_read_cr0() | CR0_WP);
 
-    // Profit
-    printk("[!] Modified IDT: 0x%llx -> 0x%llx\n", original_HB_handler, new_HB_handler);
+  // Profit
+  printk("[!] Modified IDT: 0x%llx -> 0x%llx\n", original_HB_handler,
+         new_HB_handler);
 }
 
 void hb_irq_handler(struct pt_regs *regs) {
-	hb_timer_dispatch(global_hb);
-	apic_eoi();
-	return;
+  hb_timer_dispatch(global_hb);
+  apic_eoi();
+  return;
 }
 
 EXPORT_SYMBOL(hb_irq_handler);
 
 struct user_process_info {
   void (*user_handler)(void);
-  void * state_save_area;
+  void *state_save_area;
 } user_proc_info;
 
 static void interrupt_setup(void) {
@@ -411,16 +408,11 @@ static void interrupt_setup(void) {
 
   modify_idt();
 
-	__atomic_thread_fence(__ATOMIC_SEQ_CST);
-	asm __volatile__("mfence":::"memory");
+  __atomic_thread_fence(__ATOMIC_SEQ_CST);
+  asm __volatile__("mfence" ::: "memory");
 
-	printk("hb_irq_handler: %px\n", hb_irq_handler);
-
-  // send the IPI to that vector
-  // if (hb_vector != -1) apic->send_IPI_allbutself(hb_vector);
-	//if (hb_vector != -1) apic->send_IPI_all(hb_vector);
+  printk("hb_irq_handler: %px\n", hb_irq_handler);
 }
-
 
 /* ---- End modifications ---- */
 
@@ -437,10 +429,10 @@ static int __init heartbeat_init(void) {
   int i;
   int rc;
 
-	unsigned long flags;
-	local_irq_save(flags);
-  
-	interrupt_setup();
+  unsigned long flags;
+  local_irq_save(flags);
+
+  interrupt_setup();
 
   deviceclass = NULL;
   device = NULL;
@@ -468,28 +460,10 @@ static int __init heartbeat_init(void) {
     return PTR_ERR(device);
   }
 
-  // for (hb_vector = 240; hb_vector > 0; hb_vector--) {
-  //   // set_irq_flags(hb_vector, IRQF_VALID);
-  //   rc = request_irq(hb_vector, (void *)hb_irq_handler, IRQF_SHARED,
-  //                    "Heartbeat", &fops);
-  //   if (rc == 0) {
-  //     INFO("Found irq at %d\n", hb_vector);
-  //     break;
-  //   }
-  // }
-  // if (hb_vector == 240)
-  //   hb_vector = -1;
+  INFO("hb_vector=%d\n", hb_vector);
+  INFO("Finished initialization\n");
 
-  // if (hb_vector != -1) {
-  //   for (i = 0; i < 10; i++) {
-  //     apic->send_IPI_all(hb_vector);
-  //   }
-  // }
-
-  INFO("hb_vector=%d\n", hb_vector);  
-	INFO("Finished initialization\n");
-	
-	local_irq_restore(flags);
+  local_irq_restore(flags);
 
   return 0;
 }
