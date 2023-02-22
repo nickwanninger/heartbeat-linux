@@ -39,9 +39,13 @@ kmod: linux
 	$(MAKE) $(MARGS) -C $(PWD)/build M=$(PWD)/module modules 
 	@mkdir -p root/etc/
 	@cp module/mod.ko root/etc/
- 
+
 clean: 
 	$(MAKE) $(MARGS) -C $(PWD)/build M=$(PWD)/module clean
 
 run:
 	@tools/run.sh
+
+libhb.so:
+	gcc -fPIC -o libhb.so -shared user/heartbeat.c
+ 
