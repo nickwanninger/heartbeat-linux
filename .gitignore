@@ -1,3 +1,6 @@
+*.o.cmd
+*.o
+
 linux
 initramfs.cpio.gz
 
