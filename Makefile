@@ -40,12 +40,13 @@ kmod: linux
 	@mkdir -p root/etc/
 	@cp module/mod.ko root/etc/
 
-libhb.so: user/heartbeat.c
-	$(CC) -o libhb.so -shared user/heartbeat.c
-
 clean:
-	rm -f libhb.so
-#	$(MAKE) $(MARGS) -C $(PWD)/build M=$(PWD)/module clean
+	 rm -f libhb.so
+	$(MAKE) $(MARGS) -C $(PWD)/build M=$(PWD)/module clean
 
 run:
 	@tools/run.sh
+
+libhb.so:
+	gcc -fPIC -o libhb.so -shared user/heartbeat.c
+ 
