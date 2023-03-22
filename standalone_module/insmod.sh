@@ -12,4 +12,4 @@ insmod $MOD \
     hb_error_return=0x$(grep ' error_return' /proc/kallsyms | cut -d' ' -f1)
 
 mknod /dev/heartbeat c 239 0
-
+chmod 777 /dev/heartbeat
