@@ -55,7 +55,7 @@ static void hb_schedule(uint64_t us, int repeat) {
   config.repeat = repeat;
   if (hbfd != 0) {
     ioctl(hbfd, HB_SCHEDULE, &config);
-    printf("opened /dev/heartbeat/");
+    //    printf("opened /dev/heartbeat/");
   }
 }
 
