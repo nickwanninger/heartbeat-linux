@@ -76,6 +76,7 @@ $i=0; map { emit_dst_line($_); $i++; print STDERR "emitted destination line $i (
 print STDERR "Emitted $i destination lines ($n_dest_lines_modded modified)\n";
 print OUT "\n\n";
 print OUT ".data\n";
+print OUT ".globl rollforward_table:\n";
 print OUT "rollforward_table:\n";
 
 $size=0; $i=0; map {
@@ -89,6 +90,7 @@ $size=0; $i=0; map {
 print STDERR "Emitted rollforward table\n";
 
 
+print OUT ".globl rollforward_table\n";
 print OUT "rollback_table:\n";
 
 $i=0; map { 
@@ -98,7 +100,9 @@ $i=0; map {
     $i++;
 } @lines;
 
+print OUT ".globl rollforward_table_size\n";
 print OUT "rollforward_table_size: .quad $size\n";
+print OUT ".globl rollback_table_size\n";
 print OUT "rollback_table_size: .quad $size\n";
 
 print STDERR "Emitted rollback table\n";
