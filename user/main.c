@@ -184,7 +184,7 @@ void ping_thread_main(int nproc) {
 void hbtimer_main(int nproc) {
   hb_init();
   hb_set_rollforwards(&rollforward_table[0], rollforward_table_size);
-  hb_repeat(interval_us, NULL);
+  hb_repeat(interval_us);
   for (off_t i = 0; i < nproc; i++) {
     pthread_create(&threads[i], NULL, sum_array, (void *)i);
   }
