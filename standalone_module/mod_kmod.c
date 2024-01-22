@@ -393,6 +393,28 @@ static void modify_idt(void) {
     printk("[!] Modified IDT: 0x%llx -> 0x%llx\n", original_HB_handler, new_HB_handler);
 }
 
+// Called during our cleanup. Restore the original HB handler.
+static void restore_idt(void) {
+    struct desc_ptr IDTR;
+    gate_desc * idt;
+    gate_desc * HB_gate_desc;
+
+    if (original_HB_handler == 0) {
+      return;
+    }
+    IDTR = get_idtr();
+    idt = (gate_desc *) IDTR.address;
+    HB_gate_desc = idt + HB_VECTOR;
+
+    printk("[*] Restoring original HB handler\n");
+    force_write_cr0(force_read_cr0() & ~(CR0_WP));    
+    write_handler_address_to_gd(HB_gate_desc, (unsigned long) original_HB_handler);
+    force_write_cr0(force_read_cr0() | CR0_WP);
+    return;
+}
+
+
+
 void hb_irq_handler(struct pt_regs *regs) {
 	hb_timer_dispatch(global_hb);
 	apic_eoi();
@@ -500,9 +522,11 @@ static int __init heartbeat_init(void) {
  * Teardown all the state and driver information for heartbeat
  */
 static void __exit heartbeat_exit(void) {
+
+  restore_idt();
   if (deviceclass) {
     device_destroy(deviceclass, MKDEV(major, 0)); // remove the device
-    class_unregister(deviceclass);                // unregister the device class
+//    class_unregister(deviceclass);                // unregister the device class
     class_destroy(deviceclass);                   // remove the device class
   }
   unregister_chrdev(major, DEV_NAME); // unregister the major number
